@@ -18,7 +18,7 @@
 </head>
     <body>
         <main>
-            <div id="arsip-digital-smoke"></div>
+            <div id="app"></div>
         </main>
     </body>
 </html>

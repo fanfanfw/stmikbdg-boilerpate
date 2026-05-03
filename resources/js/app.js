@@ -1,14 +1,16 @@
 import './bootstrap';
 import { createApp } from 'vue';
-import ArsipDigitalSmoke from './arsip-digital/ArsipDigitalSmoke.vue';
+import { createPinia } from 'pinia';
+import App from './App.vue';
+import router from './router';
 
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 if (csrfToken) {
     window.axios.defaults.headers.common['X-CSRF-TOKEN'] = csrfToken;
 }
 
-const smokeRoot = document.getElementById('arsip-digital-smoke');
+const appRoot = document.getElementById('app');
 
-if (smokeRoot) {
-    createApp(ArsipDigitalSmoke).mount(smokeRoot);
+if (appRoot) {
+    createApp(App).use(createPinia()).use(router).mount(appRoot);
 }
