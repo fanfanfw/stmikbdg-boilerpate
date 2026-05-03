@@ -3,9 +3,10 @@
         <PageHeader eyebrow="Export ZIP" title="Bulk download async" description="Buat job export, pantau status queue, dan download ZIP ketika completed." />
         <section class="panel-block">
             <form class="form-grid" @submit.prevent="createJob">
-                <label>Tipe export<select v-model="form.export_type"><option value="request">Request</option><option value="archive_browser">Archive browser</option><option value="distribution">Distribution</option></select></label>
+                <label>Tipe export<select v-model="form.export_type" disabled><option value="request">Request</option></select></label>
                 <label>Request ID<input v-model.number="form.request_id" type="number" placeholder="Wajib untuk tipe request" /></label>
                 <label>Status file<textarea v-model="statusesInput" rows="2" placeholder="approved,waiting_verification" /></label>
+                <p class="wide lede">Phase 7 backend hanya mengaktifkan export ZIP untuk satu request.</p>
                 <button type="submit">Buat export job</button>
             </form>
         </section>

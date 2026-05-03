@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Http\Middleware\hasToken;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Session;
 use Tests\TestCase;
@@ -11,10 +12,7 @@ class ArsipDigitalProxyTest extends TestCase
 {
     public function test_proxy_forwards_token_and_active_role_headers(): void
     {
-        config(['app.key' => 'base64:' . base64_encode(str_repeat('a', 32))]);
-        config(['myconfig.api.base_url' => 'http://stmikbdg-api.test/api']);
-        Session::put('token', 'jwt-smoke-token');
-        Session::put('role', ['is_mhs' => true]);
+        $this->withProxySession(['is_mhs' => true]);
 
         Http::fake(function ($request) {
             $this->assertSame('Bearer jwt-smoke-token', $request->header('Authorization')[0] ?? null);
@@ -32,5 +30,80 @@ class ArsipDigitalProxyTest extends TestCase
 
         $response->assertOk()
             ->assertJsonPath('data.role', 'mahasiswa');
+    }
+
+    public function test_proxy_forwards_multipart_upload(): void
+    {
+        $this->withProxySession(['is_mhs' => true]);
+
+        Http::fake(function ($request) {
+            $this->assertSame('POST', $request->method());
+            $this->assertSame('Bearer jwt-smoke-token', $request->header('Authorization')[0] ?? null);
+            $this->assertSame('mahasiswa', $request->header('X-Active-Role')[0] ?? null);
+            $this->assertStringContainsString('multipart/form-data', $request->header('Content-Type')[0] ?? '');
+            $this->assertStringContainsString('dokumen.pdf', $request->body());
+            $this->assertStringContainsString('Dokumen test', $request->body());
+
+            return Http::response([
+                'status' => 'success',
+                'data' => ['file' => ['file_id' => 10]],
+            ], 201);
+        });
+
+        $response = $this->withoutMiddleware(hasToken::class)
+            ->post('/arsip-digital/proxy/files', [
+                'display_filename' => 'Dokumen test',
+                'file' => UploadedFile::fake()->createWithContent('dokumen.pdf', '%PDF-1.4 proxy'),
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.file.file_id', 10);
+    }
+
+    public function test_proxy_preserves_binary_download_headers(): void
+    {
+        $this->withProxySession(['is_admin' => true]);
+
+        Http::fake(fn () => Http::response('zip-binary', 200, [
+            'content-type' => 'application/zip',
+            'content-disposition' => 'attachment; filename="export.zip"',
+        ]));
+
+        $response = $this->withoutMiddleware(hasToken::class)
+            ->get('/arsip-digital/proxy/admin/export-jobs/1/download');
+
+        $response->assertOk();
+        $this->assertSame('application/zip', $response->headers->get('content-type'));
+        $this->assertSame('attachment; filename="export.zip"', $response->headers->get('content-disposition'));
+        $this->assertSame('zip-binary', $response->streamedContent());
+    }
+
+    public function test_proxy_returns_backend_validation_errors_unchanged(): void
+    {
+        $this->withProxySession(['is_admin' => true]);
+
+        Http::fake(fn () => Http::response([
+            'status' => 'fail',
+            'message' => 'The title field is required.',
+            'errors' => ['title' => ['The title field is required.']],
+        ], 422));
+
+        $response = $this->withoutMiddleware(hasToken::class)
+            ->postJson('/arsip-digital/proxy/admin/requests', []);
+
+        $response->assertStatus(422)
+            ->assertExactJson([
+                'status' => 'fail',
+                'message' => 'The title field is required.',
+                'errors' => ['title' => ['The title field is required.']],
+            ]);
+    }
+
+    private function withProxySession(array $role): void
+    {
+        config(['app.key' => 'base64:' . base64_encode(str_repeat('a', 32))]);
+        config(['myconfig.api.base_url' => 'http://stmikbdg-api.test/api']);
+        Session::put('token', 'jwt-smoke-token');
+        Session::put('role', $role);
     }
 }

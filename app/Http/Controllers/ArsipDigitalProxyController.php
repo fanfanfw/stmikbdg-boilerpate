@@ -167,6 +167,16 @@ class ArsipDigitalProxyController extends Controller
             ->filter()
             ->toArray();
 
+        $contentType = strtolower($headers['content-type'] ?? '');
+        $contentDisposition = $headers['content-disposition'] ?? null;
+        $isBinary = $contentDisposition || ($contentType !== '' && ! str_contains($contentType, 'json') && ! str_contains($contentType, 'text'));
+
+        if ($isBinary) {
+            return response()->stream(function () use ($response): void {
+                print $response->body();
+            }, $response->status(), $headers);
+        }
+
         return response($response->body(), $response->status(), $headers);
     }
 }
