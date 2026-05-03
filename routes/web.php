@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ArsipDigitalProxyController;
 use Illuminate\Support\Facades\Route;
 
 /**
@@ -22,6 +23,9 @@ Route::middleware('auth.token')
         Route::get('/home', function () {
             return view('welcome');
         })->name('home');
+
+        Route::match(['GET', 'POST', 'PUT', 'DELETE'], '/arsip-digital/proxy/{path?}', [ArsipDigitalProxyController::class, 'handle'])
+            ->where('path', '.*');
     });
 
 /**
