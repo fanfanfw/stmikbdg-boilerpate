@@ -23,6 +23,8 @@
             <div class="sidebar-note">
                 <span>Role aktif</span>
                 <strong>{{ roleLabel }}</strong>
+                <small v-if="userLabel">{{ userLabel }}</small>
+                <a class="logout-link" href="/logout">Logout</a>
             </div>
         </aside>
 
@@ -31,8 +33,9 @@
                 <button type="button" class="icon-btn" @click="sidebarOpen = !sidebarOpen">Menu</button>
                 <div>
                     <strong>{{ roleLabel }}</strong>
-                    <span>{{ app.summary?.total_files ?? 0 }} file tercatat</span>
+                    <span>{{ userLabel || `${app.summary?.total_files ?? 0} file tercatat` }}</span>
                 </div>
+                <a class="logout-link topbar-logout" href="/logout">Logout</a>
             </header>
 
             <NoticeBox
@@ -74,6 +77,7 @@ const sidebarOpen = ref(false);
 
 const navigation = computed(() => (app.isAdmin ? adminNavigation : userNavigation));
 const roleLabel = computed(() => ({ admin: 'Admin', mahasiswa: 'Mahasiswa', dosen: 'Dosen' }[app.role] || 'Memuat role'));
+const userLabel = computed(() => app.profile?.nama || app.profile?.name || app.account?.email || app.session?.user_email || '');
 const routeAllowed = computed(() => {
     const roles = route.meta?.roles;
     return !roles || !app.role || roles.includes(app.role);

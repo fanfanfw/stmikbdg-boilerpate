@@ -24,6 +24,18 @@ Route::middleware('auth.token')
             return view('welcome');
         })->name('home');
 
+        Route::get('/session/me', function () {
+            $role = session('role');
+
+            return response()->json([
+                'role' => is_array($role) ? array_key_first(array_filter($role)) : $role,
+                'account' => session('account'),
+                'profile' => session('profile'),
+                'user_email' => session('user_email'),
+                'user_image' => session('user_image'),
+            ]);
+        });
+
         Route::match(['GET', 'POST', 'PUT', 'DELETE'], '/arsip-digital/proxy/{path?}', [ArsipDigitalProxyController::class, 'handle'])
             ->where('path', '.*');
     });

@@ -47,10 +47,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .nav-list a { border: 1px solid transparent; border-radius: var(--radius-md); padding: var(--space-md); color: var(--ink); text-decoration: none; font-weight: 700; }
 .nav-list a:hover, .nav-list a.router-link-active { border-color: var(--line); background: var(--accent-soft); }
 .sidebar-note { margin-top: auto; display: grid; gap: var(--space-xs); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-md); background: var(--surface); }
+.logout-link { display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.55rem 0.75rem; color: var(--danger); background: var(--panel); font-weight: 900; text-decoration: none; }
 .main-shell { min-width: 0; padding: var(--space-xl) clamp(var(--space-lg), 4vw, var(--space-3xl)); }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-lg); margin-bottom: var(--space-2xl); }
 .topbar > div { display: grid; gap: var(--space-xs); text-align: right; }
 .topbar span { color: var(--muted); font-size: 0.88rem; }
+.topbar-logout { margin-left: auto; }
 .icon-btn { display: none; }
 
 .page-stack { display: grid; gap: var(--space-xl); }
