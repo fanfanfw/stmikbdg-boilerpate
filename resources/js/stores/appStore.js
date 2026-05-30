@@ -25,8 +25,23 @@ export const useAppStore = defineStore('arsip-app', () => {
         }[value] || value || null;
     }
 
-    function notify(type, text) {
+    let toastTimer = null;
+
+    function clearToast() {
+        toast.value = null;
+        if (toastTimer) {
+            clearTimeout(toastTimer);
+            toastTimer = null;
+        }
+    }
+
+    function notify(type, text, timeout = 4200) {
+        clearToast();
         toast.value = { type, text, at: Date.now() };
+        toastTimer = setTimeout(() => {
+            toast.value = null;
+            toastTimer = null;
+        }, timeout);
     }
 
     async function loadSummary() {
@@ -42,5 +57,5 @@ export const useAppStore = defineStore('arsip-app', () => {
         }
     }
 
-    return { session, summary, loading, error, toast, role, isAdmin, isUser, profile, account, notify, loadSummary };
+    return { session, summary, loading, error, toast, role, isAdmin, isUser, profile, account, notify, clearToast, loadSummary };
 });

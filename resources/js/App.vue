@@ -43,6 +43,8 @@
                 :type="app.toast.type"
                 :title="app.toast.type === 'success' ? 'Berhasil' : 'Perhatian'"
                 :message="app.toast.text"
+                dismissible
+                @dismiss="app.clearToast"
             />
 
             <AsyncState

@@ -186,9 +186,23 @@ tbody tr:last-child td { border-bottom: 0; }
     .segmented-control button { width: 100%; }
 }
 
+.extension-picker { display: grid; gap: var(--space-sm); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-md); background: color-mix(in oklch, var(--surface), white 45%); }
+.extension-picker legend { padding: 0 var(--space-xs); color: var(--ink); font-weight: 900; }
+.extension-picker p { margin: 0; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
+.extension-grid { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+.extension-check { display: inline-flex; width: auto; grid-auto-flow: column; grid-template-columns: auto auto; align-items: center; gap: var(--space-sm); border: 1px solid var(--line); border-radius: 999px; padding: 0.48rem 0.68rem; color: var(--ink); background: var(--panel); cursor: pointer; }
+.extension-check input { width: auto; accent-color: var(--accent); }
+.extension-check:has(input:checked) { border-color: color-mix(in oklch, var(--accent), white 35%); background: var(--accent-soft); }
+.extension-check span { font-weight: 900; }
+
+.notice-box { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+.notice-close { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.42rem 0.62rem; color: var(--muted); background: transparent; font-size: 0.82rem; }
+.notice-close:hover { color: var(--ink); background: var(--surface); }
+
 .request-detail-hero .detail-grid { margin-bottom: 0; }
 .request-title-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-md); }
 .request-title-line h2 { margin: 0; }
 .tabs { display: flex; flex-wrap: wrap; gap: var(--space-sm); border-bottom: 1px solid var(--line); }
 .tab-button { border: 1px solid transparent; border-radius: var(--radius-sm) var(--radius-sm) 0 0; padding: 0.72rem 0.95rem; color: var(--muted); background: transparent; }
 .tab-button.active { border-color: var(--line); border-bottom-color: var(--panel); color: var(--ink); background: var(--panel); }
+.inline-empty { margin: 0; border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-lg); }

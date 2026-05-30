@@ -29,7 +29,7 @@
                 <input v-model="filters.search" :placeholder="role === 'mahasiswa' ? 'Nama atau NIM' : 'Nama atau kode dosen'" />
             </label>
             <label v-if="role === 'mahasiswa'">Angkatan
-                <input v-model="filters.angkatan" inputmode="numeric" placeholder="2022 atau 2021,2022" />
+                <input v-model="filters.angkatan" inputmode="numeric" placeholder="Contoh: 2022" />
             </label>
             <label>Status
                 <input v-model="filters.status" placeholder="A" />
@@ -62,7 +62,10 @@
         <AsyncState :loading="targetLoading" :error="targetError" :empty="targets.length === 0" empty-title="Belum ada target" empty-text="Ubah filter untuk mencari mahasiswa atau dosen." @retry="loadTargets(filters.page)">
             <div class="bulk-actions">
                 <strong>{{ mode === 'filter' ? 'Filter ini akan disimpan sebagai target' : `${selectedIdentifiers.length} target dipilih` }}</strong>
-                <button type="button" class="secondary-btn" @click="selectPageTargets">Pilih semua halaman ini</button>
+                <button type="button" class="secondary-btn" :disabled="selectingAllFiltered || targetMeta.total === 0" @click="selectFilteredTargets">
+                    {{ selectingAllFiltered ? 'Memilih target...' : `Pilih semua hasil filter (${targetMeta.total || 0})` }}
+                </button>
+                <button type="button" class="secondary-btn" @click="selectPageTargets">Pilih halaman ini</button>
                 <button type="button" class="ghost-btn" @click="clearTargets">Kosongkan pilihan</button>
             </div>
 
@@ -70,7 +73,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Pilih</th>
+                            <th><input type="checkbox" :checked="allPageSelected" :disabled="pageSelectableIdentifiers.length === 0" @change="togglePageTargets($event)" /></th>
                             <th>Identifier</th>
                             <th>Nama</th>
                             <th v-if="role === 'mahasiswa'">Angkatan</th>
@@ -114,6 +117,7 @@ const mode = ref('filter');
 const targets = ref([]);
 const selectedIdentifiers = ref([]);
 const targetLoading = ref(false);
+const selectingAllFiltered = ref(false);
 const targetError = ref('');
 const targetMeta = ref({ current_page: 1, last_page: 1, per_page: 25, total: 0 });
 const filters = reactive({ search: '', angkatan: '', status: 'A', has_account: '1', page: 1 });
@@ -136,6 +140,9 @@ const payload = computed(() => ({
     target_identifiers: mode.value === 'specific' ? selectedIdentifiers.value : [],
 }));
 
+const pageSelectableIdentifiers = computed(() => targets.value.filter((target) => target.has_account).map((target) => target.identifier));
+const allPageSelected = computed(() => pageSelectableIdentifiers.value.length > 0
+    && pageSelectableIdentifiers.value.every((identifier) => selectedIdentifiers.value.includes(identifier)));
 const canSubmit = computed(() => mode.value === 'filter' ? filters.has_account !== '0' : selectedIdentifiers.value.length > 0);
 
 function csv(value) {
@@ -157,14 +164,14 @@ function filterPayload() {
     return payload;
 }
 
-function targetQuery(page = filters.page) {
+function targetQuery(page = filters.page, perPage = 25) {
     return {
         role: role.value,
         search: filters.search,
         angkatan: role.value === 'mahasiswa' ? csv(filters.angkatan)[0] || '' : '',
         status: csv(filters.status)[0] || '',
         has_account: filters.has_account,
-        per_page: 25,
+        per_page: perPage,
         page,
     };
 }
@@ -208,11 +215,53 @@ async function loadTargets(page = 1) {
     }
 }
 
+function mergeIdentifiers(identifiers) {
+    const merged = new Set(selectedIdentifiers.value);
+    identifiers.forEach((identifier) => merged.add(identifier));
+    selectedIdentifiers.value = Array.from(merged);
+}
+
 function selectPageTargets() {
     mode.value = 'specific';
-    const merged = new Set(selectedIdentifiers.value);
-    targets.value.filter((target) => target.has_account).forEach((target) => merged.add(target.identifier));
-    selectedIdentifiers.value = Array.from(merged);
+    mergeIdentifiers(pageSelectableIdentifiers.value);
+}
+
+function togglePageTargets(event) {
+    mode.value = 'specific';
+    if (event.target.checked) {
+        mergeIdentifiers(pageSelectableIdentifiers.value);
+        return;
+    }
+
+    const pageSet = new Set(pageSelectableIdentifiers.value);
+    selectedIdentifiers.value = selectedIdentifiers.value.filter((identifier) => !pageSet.has(identifier));
+}
+
+async function selectFilteredTargets() {
+    if (targetMeta.value.total === 0) return;
+
+    mode.value = 'specific';
+    selectingAllFiltered.value = true;
+    targetError.value = '';
+
+    try {
+        const identifiers = [];
+        let page = 1;
+        let lastPage = 1;
+
+        do {
+            const data = await arsipApi.adminTargets(targetQuery(page, 100));
+            identifiers.push(...(data.targets || []).filter((target) => target.has_account).map((target) => target.identifier));
+            lastPage = data.meta?.last_page || 1;
+            page += 1;
+        } while (page <= lastPage);
+
+        mergeIdentifiers(identifiers);
+    } catch (err) {
+        targetError.value = toErrorMessage(err);
+    } finally {
+        selectingAllFiltered.value = false;
+    }
 }
 
 function clearTargets() {

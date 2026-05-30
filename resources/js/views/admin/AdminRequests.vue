@@ -4,56 +4,63 @@
             <template #actions><button type="button" class="secondary-btn" @click="loadAll">Refresh daftar</button></template>
         </PageHeader>
 
-        <div class="two-column wide-first request-builder-grid">
-            <section class="panel-block">
-                <div class="section-heading">
-                    <div>
-                        <h2>Detail request</h2>
-                        <p>Instruksi dan batas unggahan yang akan dilihat penerima.</p>
-                    </div>
+        <section class="panel-block">
+            <div class="section-heading">
+                <div>
+                    <h2>Detail request</h2>
+                    <p>Instruksi dan batas unggahan yang akan dilihat penerima.</p>
                 </div>
-                <form class="form-grid" @submit.prevent="saveRequest">
-                    <label>Judul<input v-model="form.title" required placeholder="Contoh: Akta Kelahiran Angkatan 2022" /></label>
-                    <label>Maks file<input v-model.number="form.max_files" type="number" min="1" /></label>
-                    <label>Maks ukuran MB<input v-model.number="form.max_file_size_mb" type="number" min="1" placeholder="Default setting" /></label>
-                    <label>Deadline<input v-model="form.deadline_at" type="datetime-local" /></label>
-                    <label class="wide">Ekstensi<textarea v-model="allowedExtensions" rows="2" placeholder="pdf,jpg,png,docx" /></label>
-                    <label class="wide">Deskripsi<textarea v-model="form.description" rows="3" placeholder="Instruksi untuk mahasiswa/dosen" /></label>
-                    <label class="check"><input v-model="form.requires_verification" type="checkbox" /> Perlu verifikasi admin</label>
-                    <label class="check"><input v-model="form.allow_file_reuse" type="checkbox" /> Izinkan reuse file lama</label>
-                    <label class="check"><input v-model="form.close_after_deadline" type="checkbox" /> Tutup setelah deadline</label>
-                </form>
-            </section>
-
-            <section class="panel-block preview-panel">
-                <div class="section-heading">
-                    <div>
-                        <h2>Preview target</h2>
-                        <p>{{ targeting?.summary || 'Target belum dihitung' }}</p>
+            </div>
+            <form class="form-grid" @submit.prevent="saveRequest">
+                <label>Judul<input v-model="form.title" required placeholder="Contoh: Akta Kelahiran Angkatan 2022" /></label>
+                <label>Maks file<input v-model.number="form.max_files" type="number" min="1" /></label>
+                <label>Maks ukuran MB<input v-model.number="form.max_file_size_mb" type="number" min="1" placeholder="Default setting" /></label>
+                <label>Deadline<input v-model="form.deadline_at" type="datetime-local" /></label>
+                <fieldset class="wide extension-picker">
+                    <legend>Ekstensi yang diizinkan</legend>
+                    <p>Mahasiswa/dosen hanya bisa mengunggah file dengan format yang dipilih.</p>
+                    <div class="extension-grid">
+                        <label v-for="extension in extensionOptions" :key="extension" class="extension-check">
+                            <input v-model="selectedExtensions" type="checkbox" :value="extension" />
+                            <span>.{{ extension }}</span>
+                        </label>
                     </div>
-                    <button type="button" class="secondary-btn" :disabled="previewLoading || !targeting?.canSubmit" @click="previewTargets">Preview</button>
-                </div>
-                <AsyncState :loading="previewLoading" :error="previewError" :empty="!preview" empty-title="Belum ada preview" empty-text="Pilih target lalu klik Preview untuk melihat penerima valid.">
-                    <div class="metric-grid compact">
-                        <article class="metric-card"><span>Total</span><strong>{{ preview.total_targets ?? 0 }}</strong></article>
-                        <article class="metric-card"><span>Valid</span><strong>{{ preview.total_valid ?? 0 }}</strong></article>
-                        <article class="metric-card"><span>Invalid</span><strong>{{ preview.total_invalid ?? 0 }}</strong></article>
-                    </div>
-                    <div class="data-list preview-list">
-                        <article v-for="target in preview.valid_targets || []" :key="target.identifier" class="list-row">
-                            <div><strong>{{ target.identifier }}</strong><small>{{ target.name_snapshot || '-' }}</small></div>
-                            <StatusPill status="approved" />
-                        </article>
-                        <article v-for="target in preview.invalid_targets || []" :key="`invalid-${target.identifier}`" class="list-row">
-                            <div><strong>{{ target.identifier }}</strong><small>{{ target.reason || 'Tidak valid' }}</small></div>
-                            <StatusPill status="rejected" />
-                        </article>
-                    </div>
-                </AsyncState>
-            </section>
-        </div>
+                </fieldset>
+                <label class="wide">Deskripsi<textarea v-model="form.description" rows="3" placeholder="Instruksi untuk mahasiswa/dosen" /></label>
+                <label class="check"><input v-model="form.requires_verification" type="checkbox" /> Perlu verifikasi admin</label>
+                <label class="check"><input v-model="form.allow_file_reuse" type="checkbox" /> Izinkan reuse file lama</label>
+                <label class="check"><input v-model="form.close_after_deadline" type="checkbox" /> Tutup setelah deadline</label>
+            </form>
+        </section>
 
         <TargetPicker @change="targeting = $event" />
+
+        <section class="panel-block preview-panel">
+            <div class="section-heading">
+                <div>
+                    <h2>Daftar target final</h2>
+                    <p>{{ targeting?.summary || 'Target belum dihitung' }}</p>
+                </div>
+                <button type="button" class="secondary-btn" :disabled="previewLoading || !targeting?.canSubmit" @click="previewTargets">Validasi target</button>
+            </div>
+            <AsyncState :loading="previewLoading" :error="previewError" :empty="!preview" empty-title="Belum ada daftar target" empty-text="Pilih target penerima, lalu klik Validasi target untuk melihat daftar final yang akan menerima request.">
+                <div class="metric-grid compact">
+                    <article class="metric-card"><span>Total</span><strong>{{ preview.total_targets ?? 0 }}</strong></article>
+                    <article class="metric-card"><span>Valid</span><strong>{{ preview.total_valid ?? 0 }}</strong></article>
+                    <article class="metric-card"><span>Invalid</span><strong>{{ preview.total_invalid ?? 0 }}</strong></article>
+                </div>
+                <div class="data-list preview-list">
+                    <article v-for="target in preview.valid_targets || []" :key="target.identifier" class="list-row">
+                        <div><strong>{{ target.identifier }}</strong><small>{{ target.name_snapshot || '-' }}</small></div>
+                        <StatusPill status="approved" />
+                    </article>
+                    <article v-for="target in preview.invalid_targets || []" :key="`invalid-${target.identifier}`" class="list-row">
+                        <div><strong>{{ target.identifier }}</strong><small>{{ target.reason || 'Tidak valid' }}</small></div>
+                        <StatusPill status="rejected" />
+                    </article>
+                </div>
+            </AsyncState>
+        </section>
 
         <section class="panel-block publish-panel">
             <div class="section-heading">
@@ -62,7 +69,7 @@
                     <p>{{ targeting?.summary || 'Pilih target penerima terlebih dahulu.' }}</p>
                 </div>
                 <div class="page-actions">
-                    <button type="button" class="secondary-btn" :disabled="saving || !targeting?.canSubmit" @click="previewTargets">Preview target</button>
+                    <button type="button" class="secondary-btn" :disabled="saving || !targeting?.canSubmit" @click="previewTargets">Validasi target</button>
                     <button type="button" :disabled="saving || !targeting?.canSubmit" @click="saveRequest">Simpan draft</button>
                 </div>
             </div>
@@ -104,7 +111,6 @@ import { arsipApi } from '../../services/arsipApi';
 import { confirmAction } from '../../services/dialogs';
 import { toErrorMessage } from '../../services/http';
 import { useAppStore } from '../../stores/appStore';
-import { lines } from '../../utils/format';
 
 const app = useAppStore();
 const loading = ref(false);
@@ -115,7 +121,8 @@ const previewError = ref('');
 const requests = ref([]);
 const preview = ref(null);
 const targeting = ref(null);
-const allowedExtensions = ref('pdf,jpg,jpeg,png,doc,docx,xls,xlsx');
+const extensionOptions = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'xls', 'xlsx'];
+const selectedExtensions = ref(['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'xls', 'xlsx']);
 
 const form = reactive({
     title: '', description: '', max_files: 1, max_file_size_mb: null, deadline_at: '',
@@ -128,7 +135,7 @@ function payload() {
         ...targeting.value.payload,
         deadline_at: form.deadline_at || null,
         max_file_size_mb: form.max_file_size_mb || null,
-        allowed_extensions: lines(allowedExtensions.value),
+        allowed_extensions: selectedExtensions.value,
     };
 }
 
