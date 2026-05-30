@@ -2,7 +2,6 @@ export const adminNavigation = [
     { label: 'Dashboard', name: 'admin.dashboard' },
     { label: 'Arsip Pengguna', name: 'admin.archive' },
     { label: 'Permintaan Berkas', name: 'admin.requests' },
-    { label: 'Monitoring Assignment', name: 'admin.monitoring' },
     { label: 'Distribusi Berkas', name: 'admin.distributions' },
     { label: 'Audit Log', name: 'admin.audit' },
     { label: 'Pengaturan', name: 'admin.settings' },

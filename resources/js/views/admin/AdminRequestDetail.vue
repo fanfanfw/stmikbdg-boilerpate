@@ -1,5 +1,6 @@
 <template>
     <section class="page-stack">
+        <input ref="adminUploadInput" class="sr-only-file" type="file" @change="handleAdminUpload" />
         <PageHeader eyebrow="Detail request" :title="requestData?.title || 'Memuat request'" :description="requestData?.description || 'Kelola status, target, dan file yang terkumpul untuk request ini.'">
             <template #actions>
                 <RouterLink class="secondary-btn" :to="{ name: 'admin.requests' }">Kembali</RouterLink>
@@ -102,42 +103,88 @@
 
             <section v-if="activeTab === 'targets'" class="panel-block">
                 <div class="section-heading">
-                    <div><h2>Target</h2><p>Assignment yang dibuat untuk request ini.</p></div>
+                    <div><h2>Target</h2><p>Monitoring assignment, verifikasi, upload admin, dan file target request ini.</p></div>
+                    <button type="button" class="secondary-btn" :disabled="loading" @click="loadDetail">Refresh</button>
                 </div>
-                <div v-if="assignments.length" class="table-wrap">
+                <form class="filter-bar request-monitor-filter" @submit.prevent>
+                    <select v-model="targetFilters.status"><option value="">Semua status target</option><option v-for="status in assignmentStatuses" :key="status" :value="status">{{ statusLabel(status) }}</option></select>
+                    <select v-model="targetFilters.verification"><option value="">Semua verifikasi</option><option value="waiting_verification">Menunggu verifikasi</option><option value="approved">Disetujui</option><option value="rejected">Ditolak</option><option value="no_files">Belum ada file</option></select>
+                    <select v-model="targetFilters.late"><option value="">Semua deadline</option><option value="late">Terlambat</option><option value="on_time">Tidak terlambat</option></select>
+                    <input v-model="targetFilters.search" placeholder="Cari NIM/kode/nama" />
+                </form>
+                <div class="bulk-actions request-bulk-actions">
+                    <strong>{{ selectedAssignments.length }} target dipilih</strong>
+                    <div class="page-actions">
+                        <button type="button" class="secondary-btn" :disabled="bulkLoading || selectedVerifiableAssignmentIds.length === 0" @click="bulkApproveSelected">Bulk approve</button>
+                        <button type="button" class="ghost-btn" :disabled="bulkLoading || selectedVerifiableAssignmentIds.length === 0" @click="bulkRejectSelected">Bulk reject</button>
+                    </div>
+                </div>
+                <div v-if="filteredAssignments.length" class="table-wrap">
                     <table>
-                        <thead><tr><th>Target</th><th>Status</th><th>Submitted</th><th>File</th></tr></thead>
+                        <thead><tr><th><input type="checkbox" :checked="allFilteredAssignmentsSelected" @change="toggleAllFilteredAssignments($event)" /></th><th>Target</th><th>Status Target</th><th>Verifikasi</th><th>Submitted</th><th>File</th><th>Aksi</th></tr></thead>
                         <tbody>
-                            <tr v-for="assignment in assignments" :key="assignment.assignment_id">
+                            <tr v-for="assignment in filteredAssignments" :key="assignment.assignment_id">
+                                <td><input v-model="selectedAssignmentIds" type="checkbox" :value="assignment.assignment_id" /></td>
                                 <td><strong>{{ assignment.identifier }}</strong><small>{{ assignment.name_snapshot || '-' }} · {{ assignment.angkatan_snapshot || assignment.prodi_snapshot || '-' }}</small></td>
-                                <td><StatusPill :status="assignment.status" /><small v-if="assignment.is_late">Terlambat</small></td>
+                                <td><StatusPill :status="assignment.status" /><small v-if="assignment.is_late">Terlambat</small><small v-if="assignment.reject_reason">Catatan: {{ assignment.reject_reason }}</small></td>
+                                <td><StatusPill :status="verificationStatus(assignment)" /><small>{{ verificationText(assignment) }}</small></td>
                                 <td>{{ dateTime(assignment.submitted_at) }}</td>
-                                <td>{{ currentFiles(assignment).length }}</td>
+                                <td>
+                                    <div class="mini-stack">
+                                        <button v-for="file in currentFiles(assignment)" :key="file.request_file_id" type="button" class="ghost-btn" @click="downloadRequestFile(file)">Download {{ file.file?.display_filename || file.request_file_id }}</button>
+                                        <small v-if="currentFiles(assignment).length === 0">Belum ada file</small>
+                                    </div>
+                                </td>
+                                <td class="action-cell">
+                                    <button type="button" class="secondary-btn" :disabled="actionLoading || assignment.status !== 'waiting_verification'" @click="approve(assignment)">Approve</button>
+                                    <button type="button" class="ghost-btn" :disabled="actionLoading || assignment.status !== 'waiting_verification'" @click="reject(assignment)">Reject</button>
+                                    <button type="button" class="secondary-btn" :disabled="actionLoading || requestData.status !== 'published'" @click="chooseAdminUpload(assignment)">Upload admin</button>
+                                </td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-                <p v-else class="muted-card inline-empty">Belum ada target. Publish draft untuk membuat assignment.</p>
+                <p v-else class="muted-card inline-empty">Belum ada target sesuai filter. Publish draft untuk membuat assignment.</p>
             </section>
 
             <section v-if="activeTab === 'files'" class="panel-block">
                 <div class="section-heading">
-                    <div><h2>File terkumpul</h2><p>File current dari semua target request.</p></div>
+                    <div><h2>File terkumpul</h2><p>Filter, verifikasi, dan download file current dari semua target request.</p></div>
+                    <button type="button" class="secondary-btn" :disabled="loading" @click="loadDetail">Refresh</button>
                 </div>
-                <div v-if="collectedFiles.length" class="table-wrap">
+                <form class="filter-bar request-monitor-filter" @submit.prevent>
+                    <select v-model="fileFilters.status"><option value="all">Semua file</option><option value="waiting_verification">Menunggu verifikasi</option><option value="approved">Disetujui</option><option value="rejected">Ditolak</option><option value="late">Terlambat</option></select>
+                    <input v-model="fileFilters.search" placeholder="Cari file/target/nama" />
+                    <button type="button" class="secondary-btn" :disabled="selectedRequestFiles.length === 0" @click="downloadSelectedFiles">Download selected</button>
+                    <button type="button" class="ghost-btn" :disabled="selectedRequestFileIds.length === 0" @click="selectedRequestFileIds = []">Kosongkan pilihan</button>
+                </form>
+                <div class="bulk-actions request-bulk-actions">
+                    <strong>{{ selectedRequestFiles.length }} file dipilih</strong>
+                    <div class="page-actions">
+                        <button type="button" class="secondary-btn" :disabled="bulkLoading || selectedFileAssignmentIds.length === 0" @click="bulkApproveFileAssignments">Bulk approve file</button>
+                        <button type="button" class="ghost-btn" :disabled="bulkLoading || selectedFileAssignmentIds.length === 0" @click="bulkRejectFileAssignments">Bulk reject file</button>
+                    </div>
+                </div>
+                <div v-if="filteredCollectedFiles.length" class="table-wrap">
                     <table>
-                        <thead><tr><th>File</th><th>Target</th><th>Status</th><th>Aksi</th></tr></thead>
+                        <thead><tr><th><input type="checkbox" :checked="allFilteredFilesSelected" @change="toggleAllFilteredFiles($event)" /></th><th>File</th><th>Target</th><th>Status</th><th>Waktu</th><th>Aksi</th></tr></thead>
                         <tbody>
-                            <tr v-for="item in collectedFiles" :key="item.file.request_file_id">
-                                <td><strong>{{ item.file.file?.display_filename || item.file.file_id }}</strong><small>{{ item.file.submission_type }}</small></td>
+                            <tr v-for="item in filteredCollectedFiles" :key="item.file.request_file_id">
+                                <td><input v-model="selectedRequestFileIds" type="checkbox" :value="item.file.request_file_id" /></td>
+                                <td><strong>{{ item.file.file?.display_filename || item.file.file_id }}</strong><small>{{ item.file.submission_type }} · {{ item.file.file?.extension || '-' }} · {{ fileSize(item.file.file?.file_size_bytes) }}</small></td>
                                 <td>{{ item.assignment.identifier }}<small>{{ item.assignment.name_snapshot || '-' }}</small></td>
-                                <td><StatusPill :status="item.file.status" /><small v-if="item.file.is_late">Terlambat</small></td>
-                                <td><button type="button" class="secondary-btn" @click="downloadRequestFile(item.file)">Download</button></td>
+                                <td><StatusPill :status="item.file.status" /><small v-if="item.file.is_late">Terlambat</small><small v-if="item.file.reject_reason">Catatan: {{ item.file.reject_reason }}</small></td>
+                                <td>{{ dateTime(item.file.created_at) }}</td>
+                                <td class="action-cell">
+                                    <button type="button" class="secondary-btn" @click="downloadRequestFile(item.file)">Download</button>
+                                    <button type="button" class="secondary-btn" :disabled="actionLoading || item.assignment.status !== 'waiting_verification'" @click="approve(item.assignment)">Approve</button>
+                                    <button type="button" class="ghost-btn" :disabled="actionLoading || item.assignment.status !== 'waiting_verification'" @click="reject(item.assignment)">Reject</button>
+                                </td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-                <p v-else class="muted-card inline-empty">Belum ada file yang terkumpul.</p>
+                <p v-else class="muted-card inline-empty">Belum ada file yang terkumpul sesuai filter.</p>
             </section>
 
             <section v-if="activeTab === 'activity'" class="panel-block">
@@ -153,14 +200,15 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import AsyncState from '../../components/AsyncState.vue';
 import PageHeader from '../../components/PageHeader.vue';
 import StatusPill from '../../components/StatusPill.vue';
 import TargetPicker from '../../components/TargetPicker.vue';
+import { assignmentStatuses, statusLabel } from '../../constants/navigation';
 import { arsipApi } from '../../services/arsipApi';
-import { confirmAction } from '../../services/dialogs';
+import { confirmAction, promptText } from '../../services/dialogs';
 import { toErrorMessage } from '../../services/http';
 import { useAppStore } from '../../stores/appStore';
 import { dateTime } from '../../utils/format';
@@ -181,6 +229,13 @@ const appendError = ref('');
 const appendTargeting = ref(null);
 const appendPreview = ref(null);
 const appendPickerKey = ref(0);
+const bulkLoading = ref(false);
+const adminUploadInput = ref(null);
+const pendingUploadAssignment = ref(null);
+const selectedAssignmentIds = ref([]);
+const selectedRequestFileIds = ref([]);
+const targetFilters = reactive({ status: '', verification: '', late: '', search: '' });
+const fileFilters = reactive({ status: 'all', search: '' });
 
 const tabs = [
     { key: 'summary', label: 'Ringkasan' },
@@ -191,6 +246,14 @@ const tabs = [
 
 const assignments = computed(() => requestData.value?.assignments || []);
 const collectedFiles = computed(() => assignments.value.flatMap((assignment) => currentFiles(assignment).map((file) => ({ assignment, file }))));
+const filteredAssignments = computed(() => assignments.value.filter(matchesTargetFilters));
+const filteredCollectedFiles = computed(() => collectedFiles.value.filter(matchesFileFilters));
+const selectedAssignments = computed(() => assignments.value.filter((assignment) => selectedAssignmentIds.value.includes(assignment.assignment_id)));
+const selectedVerifiableAssignmentIds = computed(() => selectedAssignments.value.filter((assignment) => assignment.status === 'waiting_verification').map((assignment) => assignment.assignment_id));
+const selectedRequestFiles = computed(() => collectedFiles.value.filter((item) => selectedRequestFileIds.value.includes(item.file.request_file_id)));
+const selectedFileAssignmentIds = computed(() => Array.from(new Set(selectedRequestFiles.value.filter((item) => item.assignment.status === 'waiting_verification').map((item) => item.assignment.assignment_id))));
+const allFilteredAssignmentsSelected = computed(() => filteredAssignments.value.length > 0 && filteredAssignments.value.every((assignment) => selectedAssignmentIds.value.includes(assignment.assignment_id)));
+const allFilteredFilesSelected = computed(() => filteredCollectedFiles.value.length > 0 && filteredCollectedFiles.value.every((item) => selectedRequestFileIds.value.includes(item.file.request_file_id)));
 const appendPreviewSummary = computed(() => ({
     created: appendPreview.value?.newTargets?.length || 0,
     duplicate: appendPreview.value?.duplicateTargets?.length || 0,
@@ -200,6 +263,79 @@ const canAppendTargets = computed(() => appendTargeting.value?.canSubmit && appe
 
 function currentFiles(assignment) {
     return (assignment.request_files || []).filter((item) => item.is_current !== false);
+}
+
+function normalized(value) {
+    return String(value || '').toLowerCase();
+}
+
+function assignmentSearchText(assignment) {
+    return normalized(`${assignment.identifier || ''} ${assignment.name_snapshot || ''} ${assignment.angkatan_snapshot || ''} ${assignment.prodi_snapshot || ''}`);
+}
+
+function fileSearchText(item) {
+    return normalized(`${item.file.file?.display_filename || ''} ${item.assignment.identifier || ''} ${item.assignment.name_snapshot || ''}`);
+}
+
+function matchesTargetFilters(assignment) {
+    if (targetFilters.status && assignment.status !== targetFilters.status) return false;
+    if (targetFilters.late === 'late' && !assignment.is_late) return false;
+    if (targetFilters.late === 'on_time' && assignment.is_late) return false;
+    if (targetFilters.verification === 'no_files' && currentFiles(assignment).length > 0) return false;
+    if (['waiting_verification', 'approved', 'rejected'].includes(targetFilters.verification) && assignment.status !== targetFilters.verification) return false;
+    if (targetFilters.search && !assignmentSearchText(assignment).includes(normalized(targetFilters.search))) return false;
+    return true;
+}
+
+function matchesFileFilters(item) {
+    if (fileFilters.status === 'late' && !item.file.is_late) return false;
+    if (['waiting_verification', 'approved', 'rejected'].includes(fileFilters.status) && item.file.status !== fileFilters.status) return false;
+    if (fileFilters.search && !fileSearchText(item).includes(normalized(fileFilters.search))) return false;
+    return true;
+}
+
+function verificationStatus(assignment) {
+    if (assignment.status === 'waiting_verification') return 'waiting_verification';
+    if (assignment.status === 'approved') return 'approved';
+    if (assignment.status === 'rejected') return 'rejected';
+    return 'not_submitted';
+}
+
+function verificationText(assignment) {
+    if (assignment.status === 'waiting_verification') return 'Butuh review admin.';
+    if (assignment.status === 'approved' && requestData.value?.requires_verification === false) return 'Otomatis diterima; request tidak perlu verifikasi.';
+    if (assignment.status === 'approved') return assignment.verified_by_user_id ? 'Sudah diverifikasi admin.' : 'Sudah diterima.';
+    if (assignment.status === 'rejected') return assignment.reject_reason || 'Ditolak admin.';
+    return 'Belum ada submission.';
+}
+
+function fileSize(bytes) {
+    const size = Number(bytes || 0);
+    if (!size) return '-';
+    if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function mergeIds(current, ids) {
+    return Array.from(new Set([...current, ...ids]));
+}
+
+function toggleAllFilteredAssignments(event) {
+    const ids = filteredAssignments.value.map((assignment) => assignment.assignment_id);
+    if (event.target.checked) {
+        selectedAssignmentIds.value = mergeIds(selectedAssignmentIds.value, ids);
+        return;
+    }
+    selectedAssignmentIds.value = selectedAssignmentIds.value.filter((id) => !ids.includes(id));
+}
+
+function toggleAllFilteredFiles(event) {
+    const ids = filteredCollectedFiles.value.map((item) => item.file.request_file_id);
+    if (event.target.checked) {
+        selectedRequestFileIds.value = mergeIds(selectedRequestFileIds.value, ids);
+        return;
+    }
+    selectedRequestFileIds.value = selectedRequestFileIds.value.filter((id) => !ids.includes(id));
 }
 
 function normalizeTargetList(list) {
@@ -405,8 +541,152 @@ async function appendTargets() {
     }
 }
 
+async function approve(assignment) {
+    const confirmed = await confirmAction({
+        title: 'Approve assignment?',
+        text: `${assignment.identifier} - ${assignment.name_snapshot || 'tanpa nama'}`,
+        confirmText: 'Approve',
+    });
+    if (!confirmed) return;
+
+    actionLoading.value = true;
+    try {
+        await arsipApi.approveAssignment(assignment.assignment_id);
+        app.notify('success', 'Assignment disetujui.');
+        await loadDetail();
+    } catch (err) {
+        app.notify('error', toErrorMessage(err));
+    } finally {
+        actionLoading.value = false;
+    }
+}
+
+async function reject(assignment) {
+    const reason = await promptText({
+        title: 'Reject assignment?',
+        text: `${assignment.identifier} - ${assignment.name_snapshot || 'tanpa nama'}`,
+        inputLabel: 'Catatan reject',
+        placeholder: 'Tulis alasan agar penerima tahu apa yang perlu diperbaiki.',
+        confirmText: 'Reject',
+    });
+    if (!reason) return;
+
+    actionLoading.value = true;
+    try {
+        await arsipApi.rejectAssignment(assignment.assignment_id, reason);
+        app.notify('success', 'Assignment ditolak dengan catatan.');
+        await loadDetail();
+    } catch (err) {
+        app.notify('error', toErrorMessage(err));
+    } finally {
+        actionLoading.value = false;
+    }
+}
+
+async function runBulkAction({ ids, mode }) {
+    if (!ids.length) {
+        app.notify('error', 'Pilih assignment yang menunggu verifikasi terlebih dahulu.');
+        return;
+    }
+
+    let reason = '';
+    if (mode === 'reject') {
+        reason = await promptText({
+            title: 'Bulk reject assignment?',
+            text: `${ids.length} assignment akan ditolak dengan catatan yang sama.`,
+            inputLabel: 'Catatan reject',
+            placeholder: 'Tulis alasan reject massal.',
+            confirmText: 'Bulk reject',
+        });
+        if (!reason) return;
+    } else {
+        const confirmed = await confirmAction({
+            title: 'Bulk approve assignment?',
+            text: `${ids.length} assignment menunggu verifikasi akan disetujui.`,
+            confirmText: 'Bulk approve',
+            icon: 'warning',
+        });
+        if (!confirmed) return;
+    }
+
+    bulkLoading.value = true;
+    try {
+        const data = mode === 'reject'
+            ? await arsipApi.bulkRejectAssignments(ids, reason)
+            : await arsipApi.bulkApproveAssignments(ids);
+        const result = data.result || {};
+        app.notify('success', `Bulk ${mode === 'reject' ? 'reject' : 'approve'} selesai: ${result.updated || 0} diproses, ${result.skipped || 0} dilewati.`);
+        selectedAssignmentIds.value = [];
+        selectedRequestFileIds.value = [];
+        await loadDetail();
+    } catch (err) {
+        app.notify('error', toErrorMessage(err));
+    } finally {
+        bulkLoading.value = false;
+    }
+}
+
+function bulkApproveSelected() {
+    return runBulkAction({ ids: selectedVerifiableAssignmentIds.value, mode: 'approve' });
+}
+
+function bulkRejectSelected() {
+    return runBulkAction({ ids: selectedVerifiableAssignmentIds.value, mode: 'reject' });
+}
+
+function bulkApproveFileAssignments() {
+    return runBulkAction({ ids: selectedFileAssignmentIds.value, mode: 'approve' });
+}
+
+function bulkRejectFileAssignments() {
+    return runBulkAction({ ids: selectedFileAssignmentIds.value, mode: 'reject' });
+}
+
+function chooseAdminUpload(assignment) {
+    pendingUploadAssignment.value = assignment;
+    adminUploadInput.value?.click();
+}
+
+async function handleAdminUpload(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    const assignment = pendingUploadAssignment.value;
+    pendingUploadAssignment.value = null;
+    if (!file || !assignment) return;
+
+    const confirmed = await confirmAction({
+        title: 'Upload file untuk target?',
+        text: `${assignment.identifier} - ${assignment.name_snapshot || 'tanpa nama'}`,
+        confirmText: 'Upload',
+    });
+    if (!confirmed) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('owner_role', assignment.target_role);
+    formData.append('owner_identifier', assignment.identifier);
+    formData.append('request_assignment_id', assignment.assignment_id);
+
+    actionLoading.value = true;
+    try {
+        await arsipApi.uploadForUser(formData);
+        app.notify('success', 'File admin berhasil diupload untuk target.');
+        await loadDetail();
+    } catch (err) {
+        app.notify('error', toErrorMessage(err));
+    } finally {
+        actionLoading.value = false;
+    }
+}
+
 async function downloadRequestFile(requestFile) {
     await arsipApi.downloadRequestFile(requestFile);
+}
+
+async function downloadSelectedFiles() {
+    for (const item of selectedRequestFiles.value) {
+        await downloadRequestFile(item.file);
+    }
 }
 
 onMounted(loadDetail);

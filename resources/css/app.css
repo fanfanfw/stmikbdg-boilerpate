@@ -199,6 +199,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .notice-close { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.42rem 0.62rem; color: var(--muted); background: transparent; font-size: 0.82rem; }
 .notice-close:hover { color: var(--ink); background: var(--surface); }
 
+.sr-only-file { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .request-detail-hero .detail-grid { margin-bottom: 0; }
 .request-title-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-md); }
 .request-title-line h2 { margin: 0; }

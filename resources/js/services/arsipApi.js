@@ -33,6 +33,8 @@ export const arsipApi = {
     requestProgress: (id) => get(`/admin/requests/${id}/progress`),
     approveAssignment: (id) => post(`/admin/request-assignments/${id}/approve`),
     rejectAssignment: (id, reason) => post(`/admin/request-assignments/${id}/reject`, { reason }),
+    bulkApproveAssignments: (assignmentIds) => post('/admin/request-assignments/bulk-approve', { assignment_ids: assignmentIds }),
+    bulkRejectAssignments: (assignmentIds, reason) => post('/admin/request-assignments/bulk-reject', { assignment_ids: assignmentIds, reason }),
     downloadRequestFile: (requestFile) => download(
         `/admin/request-files/${requestFile.request_file_id}/download`,
         requestFile.file?.display_filename || `request-file-${requestFile.request_file_id}`,
