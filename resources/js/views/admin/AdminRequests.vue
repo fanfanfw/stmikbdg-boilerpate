@@ -82,7 +82,7 @@
                                 <td>{{ request.assignments_count ?? 0 }}</td>
                                 <td class="action-cell">
                                     <button v-if="request.status === 'draft'" type="button" class="secondary-btn" @click="publish(request)">Publish</button>
-                                    <RouterLink class="text-link" :to="{ name: 'admin.monitoring', query: { request_id: request.request_id } }">Monitoring</RouterLink>
+                                    <RouterLink class="text-link" :to="{ name: 'admin.requests.show', params: { request_id: request.request_id } }">Detail</RouterLink>
                                 </td>
                             </tr>
                         </tbody>

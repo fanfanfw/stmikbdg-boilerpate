@@ -185,3 +185,10 @@ tbody tr:last-child td { border-bottom: 0; }
     .segmented-control { width: 100%; }
     .segmented-control button { width: 100%; }
 }
+
+.request-detail-hero .detail-grid { margin-bottom: 0; }
+.request-title-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-md); }
+.request-title-line h2 { margin: 0; }
+.tabs { display: flex; flex-wrap: wrap; gap: var(--space-sm); border-bottom: 1px solid var(--line); }
+.tab-button { border: 1px solid transparent; border-radius: var(--radius-sm) var(--radius-sm) 0 0; padding: 0.72rem 0.95rem; color: var(--muted); background: transparent; }
+.tab-button.active { border-color: var(--line); border-bottom-color: var(--panel); color: var(--ink); background: var(--panel); }

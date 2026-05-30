@@ -3,6 +3,7 @@ import { createRouter, createWebHashHistory } from 'vue-router';
 const AdminDashboard = () => import('../views/admin/AdminDashboard.vue');
 const AdminArchive = () => import('../views/admin/AdminArchive.vue');
 const AdminRequests = () => import('../views/admin/AdminRequests.vue');
+const AdminRequestDetail = () => import('../views/admin/AdminRequestDetail.vue');
 const AdminMonitoring = () => import('../views/admin/AdminMonitoring.vue');
 const AdminDistributions = () => import('../views/admin/AdminDistributions.vue');
 const AdminScholarships = () => import('../views/admin/AdminScholarships.vue');
@@ -20,6 +21,7 @@ const routes = [
     { path: '/admin/dashboard', name: 'admin.dashboard', component: AdminDashboard, meta: { roles: ['admin'] } },
     { path: '/admin/arsip-pengguna', name: 'admin.archive', component: AdminArchive, meta: { roles: ['admin'] } },
     { path: '/admin/permintaan', name: 'admin.requests', component: AdminRequests, meta: { roles: ['admin'] } },
+    { path: '/admin/permintaan/:request_id', name: 'admin.requests.show', component: AdminRequestDetail, meta: { roles: ['admin'] } },
     { path: '/admin/monitoring', name: 'admin.monitoring', component: AdminMonitoring, meta: { roles: ['admin'] } },
     { path: '/admin/distribusi', name: 'admin.distributions', component: AdminDistributions, meta: { roles: ['admin'] } },
     { path: '/admin/beasiswa', name: 'admin.scholarships', component: AdminScholarships, meta: { roles: ['admin'] } },
