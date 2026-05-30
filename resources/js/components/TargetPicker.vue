@@ -6,8 +6,8 @@
                 <p>Pilih kelompok besar dari filter, atau centang penerima tertentu jika hanya sebagian yang perlu diproses.</p>
             </div>
             <div class="segmented-control" aria-label="Role target">
-                <button type="button" :class="role === 'mahasiswa' ? 'active' : ''" @click="setRole('mahasiswa')">Mahasiswa</button>
-                <button type="button" :class="role === 'dosen' ? 'active' : ''" @click="setRole('dosen')">Dosen</button>
+                <button type="button" :class="role === 'mahasiswa' ? 'active' : ''" :disabled="props.lockRole" @click="setRole('mahasiswa')">Mahasiswa</button>
+                <button type="button" :class="role === 'dosen' ? 'active' : ''" :disabled="props.lockRole" @click="setRole('dosen')">Dosen</button>
             </div>
         </div>
 
@@ -110,9 +110,13 @@ import StatusPill from './StatusPill.vue';
 import { arsipApi } from '../services/arsipApi';
 import { toErrorMessage } from '../services/http';
 
+const props = defineProps({
+    initialRole: { type: String, default: 'mahasiswa' },
+    lockRole: { type: Boolean, default: false },
+});
 const emit = defineEmits(['change']);
 
-const role = ref('mahasiswa');
+const role = ref(['mahasiswa', 'dosen'].includes(props.initialRole) ? props.initialRole : 'mahasiswa');
 const mode = ref('filter');
 const targets = ref([]);
 const selectedIdentifiers = ref([]);
@@ -193,6 +197,7 @@ function setRole(nextRole) {
     selectedIdentifiers.value = [];
     filters.angkatan = '';
     filters.page = 1;
+    targetMeta.value = { current_page: 1, last_page: 1, per_page: 25, total: 0 };
     loadTargets(1);
 }
 

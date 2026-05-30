@@ -20,7 +20,7 @@
                     <div class="page-actions">
                         <RouterLink v-if="requestData.status === 'draft'" class="secondary-btn" :to="{ name: 'admin.requests' }">Edit</RouterLink>
                         <button v-if="requestData.status === 'draft'" type="button" :disabled="actionLoading" @click="publishRequest">Publish</button>
-                        <button v-if="requestData.status === 'published'" type="button" class="secondary-btn" disabled>Tambah Target</button>
+                        <button v-if="requestData.status === 'published'" type="button" class="secondary-btn" :disabled="actionLoading" @click="openAppendPanel">Tambah Target</button>
                         <button v-if="requestData.status === 'published'" type="button" class="secondary-btn" :disabled="actionLoading" @click="closeRequest">Tutup</button>
                         <button v-if="requestData.status === 'closed'" type="button" :disabled="actionLoading" @click="reopenRequest">Buka Lagi</button>
                         <button v-if="['draft', 'closed'].includes(requestData.status)" type="button" class="ghost-btn" :disabled="actionLoading" @click="archiveRequest">Arsipkan</button>
@@ -35,6 +35,53 @@
                     <div><dt>Closed</dt><dd>{{ dateTime(requestData.closed_at) }}</dd></div>
                     <div><dt>Aturan file</dt><dd>{{ requestData.max_files }} file · {{ (requestData.allowed_extensions || []).join(', ') || 'default' }}</dd></div>
                 </dl>
+            </section>
+
+            <section v-if="showAppendPanel" class="panel-block append-target-panel">
+                <div class="section-heading">
+                    <div>
+                        <h2>Tambah Target</h2>
+                        <p>Pilih target tambahan untuk request published. Role dikunci mengikuti request ini: {{ requestData.target_role }}.</p>
+                    </div>
+                    <button type="button" class="ghost-btn" :disabled="appendLoading" @click="closeAppendPanel">Tutup Panel</button>
+                </div>
+
+                <TargetPicker :key="appendPickerKey" :initial-role="requestData.target_role" lock-role @change="onAppendTargetChange" />
+
+                <section class="append-preview-block">
+                    <div class="section-heading">
+                        <div>
+                            <h2>Preview Tambah Target</h2>
+                            <p>{{ appendTargeting?.summary || 'Pilih target tambahan, lalu validasi sebelum menambahkan.' }}</p>
+                        </div>
+                        <div class="page-actions">
+                            <button type="button" class="secondary-btn" :disabled="appendLoading || appendPreviewLoading || !appendTargeting?.canSubmit" @click="previewAppendTargets">Validasi target</button>
+                            <button type="button" :disabled="appendLoading || appendPreviewLoading || !canAppendTargets" @click="appendTargets">Tambahkan</button>
+                        </div>
+                    </div>
+
+                    <AsyncState :loading="appendPreviewLoading" :error="appendError" :empty="!appendPreview" empty-title="Belum ada preview" empty-text="Klik Validasi target untuk melihat target baru, duplicate, dan invalid.">
+                        <div class="metric-grid compact append-metric-grid">
+                            <article class="metric-card"><span>Target baru</span><strong>{{ appendPreviewSummary.created }}</strong></article>
+                            <article class="metric-card"><span>Sudah ada / duplicate</span><strong>{{ appendPreviewSummary.duplicate }}</strong></article>
+                            <article class="metric-card"><span>Invalid</span><strong>{{ appendPreviewSummary.invalid }}</strong></article>
+                        </div>
+                        <div class="data-list preview-list">
+                            <article v-for="target in appendPreview.newTargets" :key="`new-${target.identifier}`" class="list-row">
+                                <div><strong>{{ target.identifier }}</strong><small>{{ target.name_snapshot || '-' }}</small></div>
+                                <StatusPill status="approved" />
+                            </article>
+                            <article v-for="target in appendPreview.duplicateTargets" :key="`duplicate-${target.identifier}`" class="list-row">
+                                <div><strong>{{ target.identifier }}</strong><small>Target sudah ada di request ini.</small></div>
+                                <StatusPill status="closed" />
+                            </article>
+                            <article v-for="target in appendPreview.invalidTargets" :key="`invalid-${target.identifier}`" class="list-row">
+                                <div><strong>{{ target.identifier }}</strong><small>{{ target.reason || 'Tidak valid' }}</small></div>
+                                <StatusPill status="rejected" />
+                            </article>
+                        </div>
+                    </AsyncState>
+                </section>
             </section>
 
             <nav class="tabs" aria-label="Tab detail request">
@@ -111,6 +158,7 @@ import { RouterLink, useRoute } from 'vue-router';
 import AsyncState from '../../components/AsyncState.vue';
 import PageHeader from '../../components/PageHeader.vue';
 import StatusPill from '../../components/StatusPill.vue';
+import TargetPicker from '../../components/TargetPicker.vue';
 import { arsipApi } from '../../services/arsipApi';
 import { confirmAction } from '../../services/dialogs';
 import { toErrorMessage } from '../../services/http';
@@ -126,6 +174,13 @@ const requestData = ref(null);
 const progress = ref({});
 const fileSummary = ref({});
 const activeTab = ref('summary');
+const showAppendPanel = ref(false);
+const appendLoading = ref(false);
+const appendPreviewLoading = ref(false);
+const appendError = ref('');
+const appendTargeting = ref(null);
+const appendPreview = ref(null);
+const appendPickerKey = ref(0);
 
 const tabs = [
     { key: 'summary', label: 'Ringkasan' },
@@ -136,19 +191,83 @@ const tabs = [
 
 const assignments = computed(() => requestData.value?.assignments || []);
 const collectedFiles = computed(() => assignments.value.flatMap((assignment) => currentFiles(assignment).map((file) => ({ assignment, file }))));
+const appendPreviewSummary = computed(() => ({
+    created: appendPreview.value?.newTargets?.length || 0,
+    duplicate: appendPreview.value?.duplicateTargets?.length || 0,
+    invalid: appendPreview.value?.invalidTargets?.length || 0,
+}));
+const canAppendTargets = computed(() => appendTargeting.value?.canSubmit && appendPreviewSummary.value.created > 0);
 
 function currentFiles(assignment) {
     return (assignment.request_files || []).filter((item) => item.is_current !== false);
+}
+
+function normalizeTargetList(list) {
+    return (list || []).map((target) => ({ ...target, identifier: String(target.identifier || '').trim() }));
+}
+
+function buildAppendPreview(summary) {
+    return {
+        newTargets: normalizeTargetList(summary.created_targets),
+        duplicateTargets: normalizeTargetList(summary.duplicate_targets),
+        invalidTargets: normalizeTargetList(summary.invalid_targets),
+    };
+}
+
+function buildAppendPreviewFromTargetPreview(preview) {
+    const existingIdentifiers = new Set(assignments.value.map((assignment) => String(assignment.identifier || '').trim()));
+    const newTargets = [];
+    const duplicateTargets = [];
+
+    normalizeTargetList(preview.valid_targets).forEach((target) => {
+        if (existingIdentifiers.has(target.identifier)) {
+            duplicateTargets.push(target);
+            return;
+        }
+
+        newTargets.push(target);
+    });
+
+    return {
+        newTargets,
+        duplicateTargets,
+        invalidTargets: normalizeTargetList(preview.invalid_targets),
+    };
+}
+
+function openAppendPanel() {
+    showAppendPanel.value = true;
+    appendError.value = '';
+}
+
+function closeAppendPanel() {
+    showAppendPanel.value = false;
+    appendError.value = '';
+    appendPreview.value = null;
+}
+
+function onAppendTargetChange(event) {
+    appendTargeting.value = event;
+    appendPreview.value = null;
+    appendError.value = '';
+}
+
+function applyDetailData(data) {
+    requestData.value = data.request;
+    progress.value = data.progress || {};
+    fileSummary.value = data.file_summary || {};
+}
+
+async function refreshDetailSnapshot() {
+    const data = await arsipApi.requestDetail(route.params.request_id);
+    applyDetailData(data);
 }
 
 async function loadDetail() {
     loading.value = true;
     error.value = '';
     try {
-        const data = await arsipApi.requestDetail(route.params.request_id);
-        requestData.value = data.request;
-        progress.value = data.progress || {};
-        fileSummary.value = data.file_summary || {};
+        await refreshDetailSnapshot();
     } catch (err) {
         error.value = toErrorMessage(err);
     } finally {
@@ -222,6 +341,68 @@ function archiveRequest() {
         action: arsipApi.archiveRequest,
         success: 'Request berhasil diarsipkan.',
     });
+}
+
+async function previewAppendTargets() {
+    if (!requestData.value || !appendTargeting.value?.canSubmit) {
+        appendError.value = 'Pilih target tambahan terlebih dahulu.';
+        return;
+    }
+
+    appendPreviewLoading.value = true;
+    appendError.value = '';
+    try {
+        await refreshDetailSnapshot();
+        const data = await arsipApi.previewRequestTargets(appendTargeting.value.payload);
+        appendPreview.value = buildAppendPreviewFromTargetPreview(data.preview || {});
+    } catch (err) {
+        appendError.value = toErrorMessage(err);
+    } finally {
+        appendPreviewLoading.value = false;
+    }
+}
+
+async function appendTargets() {
+    if (!requestData.value || !appendTargeting.value?.canSubmit) {
+        app.notify('error', 'Pilih target tambahan terlebih dahulu.');
+        return;
+    }
+
+    await previewAppendTargets();
+
+    if (appendError.value) {
+        return;
+    }
+
+    if (appendPreviewSummary.value.created < 1) {
+        app.notify('error', 'Tidak ada target baru yang valid untuk ditambahkan.');
+        return;
+    }
+
+    const confirmed = await confirmAction({
+        title: 'Tambahkan target?',
+        text: `${appendPreviewSummary.value.created} target baru akan ditambahkan. ${appendPreviewSummary.value.duplicate} duplicate dan ${appendPreviewSummary.value.invalid} invalid akan dilewati.`,
+        confirmText: 'Tambahkan',
+        icon: 'warning',
+    });
+    if (!confirmed) return;
+
+    appendLoading.value = true;
+    appendError.value = '';
+    try {
+        const data = await arsipApi.appendRequestTargets(requestData.value.request_id, appendTargeting.value.payload);
+        const summary = data.summary || {};
+        app.notify('success', `Target diproses: ${summary.created || 0} ditambahkan, ${summary.skipped_duplicate || 0} duplicate, ${summary.invalid || 0} invalid.`);
+        appendPreview.value = buildAppendPreview(summary);
+        appendTargeting.value = null;
+        appendPickerKey.value += 1;
+        activeTab.value = 'targets';
+        await loadDetail();
+    } catch (err) {
+        app.notify('error', toErrorMessage(err));
+    } finally {
+        appendLoading.value = false;
+    }
 }
 
 async function downloadRequestFile(requestFile) {

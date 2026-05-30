@@ -24,6 +24,7 @@ export const arsipApi = {
     updateRequest: (id, payload) => put(`/admin/requests/${id}`, payload),
     requestDetail: (id) => get(`/admin/requests/${id}`),
     previewRequestTargets: (payload) => post('/admin/requests/preview-targets', payload),
+    appendRequestTargets: (id, payload) => post(`/admin/requests/${id}/targets`, payload),
     publishRequest: (id) => post(`/admin/requests/${id}/publish`),
     closeRequest: (id) => post(`/admin/requests/${id}/close`),
     reopenRequest: (id) => post(`/admin/requests/${id}/reopen`),
