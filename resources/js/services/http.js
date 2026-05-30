@@ -14,6 +14,14 @@ function unwrap(response) {
     return response.data?.data ?? response.data ?? {};
 }
 
+function cleanParams(params = {}) {
+    return Object.fromEntries(
+        Object.entries(params)
+            .filter(([, value]) => value !== '' && value !== null && value !== undefined)
+            .map(([key, value]) => [key, typeof value === 'boolean' ? Number(value) : value]),
+    );
+}
+
 function messageFrom(error) {
     const data = error.response?.data;
 
@@ -24,7 +32,7 @@ function messageFrom(error) {
 }
 
 export async function get(path, params = {}) {
-    return unwrap(await client.get(path, { params }));
+    return unwrap(await client.get(path, { params: cleanParams(params) }));
 }
 
 export async function post(path, payload = {}) {
