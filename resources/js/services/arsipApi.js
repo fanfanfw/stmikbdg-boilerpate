@@ -39,14 +39,6 @@ export const arsipApi = {
     uploadAssignmentFile: (assignmentId, formData) => upload(`/request-assignments/${assignmentId}/files/upload`, formData),
     reuseAssignmentFile: (assignmentId, fileId) => post(`/request-assignments/${assignmentId}/files/reuse`, { file_id: fileId }),
 
-    segments: (params) => get('/admin/segments', params),
-    segment: (id) => get(`/admin/segments/${id}`),
-    createSegment: (payload) => post('/admin/segments', payload),
-    updateSegment: (id, payload) => put(`/admin/segments/${id}`, payload),
-    deleteSegment: (id) => destroy(`/admin/segments/${id}`),
-    addSegmentMember: (id, payload) => post(`/admin/segments/${id}/members`, payload),
-    importSegmentMembers: (id, items) => post(`/admin/segments/${id}/import`, { items }),
-    deleteSegmentMember: (segmentId, memberId) => destroy(`/admin/segments/${segmentId}/members/${memberId}`),
 
     scholarshipTypes: () => get('/admin/scholarship-types'),
     createScholarshipType: (payload) => post('/admin/scholarship-types', payload),

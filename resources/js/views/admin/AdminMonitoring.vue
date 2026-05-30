@@ -52,6 +52,7 @@ import PageHeader from '../../components/PageHeader.vue';
 import StatusPill from '../../components/StatusPill.vue';
 import { assignmentStatuses, statusLabel } from '../../constants/navigation';
 import { arsipApi } from '../../services/arsipApi';
+import { confirmAction, promptText } from '../../services/dialogs';
 import { toErrorMessage } from '../../services/http';
 import { useAppStore } from '../../stores/appStore';
 import { dateTime } from '../../utils/format';
@@ -89,14 +90,28 @@ async function loadAssignments() {
 }
 
 async function approve(assignment) {
+    const confirmed = await confirmAction({
+        title: 'Approve assignment?',
+        text: `${assignment.identifier} - ${assignment.name_snapshot || 'tanpa nama'}`,
+        confirmText: 'Approve',
+    });
+    if (!confirmed) return;
+
     await arsipApi.approveAssignment(assignment.assignment_id);
     app.notify('success', 'Assignment disetujui.');
     await loadAssignments();
 }
 
 async function reject(assignment) {
-    const reason = window.prompt('Catatan reject');
+    const reason = await promptText({
+        title: 'Reject assignment?',
+        text: `${assignment.identifier} - ${assignment.name_snapshot || 'tanpa nama'}`,
+        inputLabel: 'Catatan reject',
+        placeholder: 'Tulis alasan agar penerima tahu apa yang perlu diperbaiki.',
+        confirmText: 'Reject',
+    });
     if (!reason) return;
+
     await arsipApi.rejectAssignment(assignment.assignment_id, reason);
     app.notify('success', 'Assignment ditolak dengan catatan.');
     await loadAssignments();
@@ -110,6 +125,14 @@ async function uploadForUser(event, assignment) {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+
+    const confirmed = await confirmAction({
+        title: 'Upload file untuk target?',
+        text: `${assignment.identifier} - ${assignment.name_snapshot || 'tanpa nama'}`,
+        confirmText: 'Upload',
+    });
+    if (!confirmed) return;
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('owner_role', assignment.target_role);

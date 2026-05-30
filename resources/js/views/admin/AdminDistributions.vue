@@ -1,81 +1,66 @@
 <template>
     <section class="page-stack">
-        <PageHeader eyebrow="Distribusi berkas" title="Kirim file berbeda ke penerima" description="Buat distribusi, preview target, publish, lalu upload file per penerima." />
+        <PageHeader eyebrow="Distribusi berkas" title="Kirim file ke penerima" description="Buat distribusi, pilih target penerima, publish, lalu upload file untuk masing-masing penerima.">
+            <template #actions><button type="button" class="secondary-btn" @click="load">Refresh daftar</button></template>
+        </PageHeader>
 
-        <div class="two-column wide-first">
+        <div class="two-column wide-first request-builder-grid">
             <section class="panel-block">
-                <div class="section-heading"><h2>Buat distribution</h2></div>
+                <div class="section-heading">
+                    <div>
+                        <h2>Detail distribusi</h2>
+                        <p>Judul dan catatan yang membantu admin mengenali batch pengiriman file.</p>
+                    </div>
+                </div>
                 <form class="form-grid" @submit.prevent="saveDistribution">
                     <label>Judul<input v-model="form.title" required placeholder="Sertifikat Seminar AI 2026" /></label>
-                    <label>Target role<select v-model="form.target_role" @change="resetTargets"><option value="mahasiswa">Mahasiswa</option><option value="dosen">Dosen</option></select></label>
-                    <label class="wide">Deskripsi<textarea v-model="form.description" rows="3" /></label>
-                    <div class="form-actions wide">
-                        <button type="submit">Simpan draft</button>
-                        <button type="button" class="secondary-btn" @click="previewTargets">Preview target</button>
-                    </div>
+                    <label class="wide">Deskripsi<textarea v-model="form.description" rows="3" placeholder="Catatan internal atau instruksi singkat" /></label>
                 </form>
             </section>
 
-            <section class="panel-block">
-                <div class="section-heading"><h2>Preview</h2></div>
-                <AsyncState :loading="previewLoading" :error="previewError" :empty="!preview" empty-title="Belum ada preview" empty-text="Preview memastikan target bisa di-resolve sebelum publish.">
-                    <article class="metric-card"><span>Total target</span><strong>{{ preview.total ?? preview.targets?.length ?? 0 }}</strong></article>
+            <section class="panel-block preview-panel">
+                <div class="section-heading">
+                    <div>
+                        <h2>Preview target</h2>
+                        <p>{{ targeting?.summary || 'Target belum dihitung' }}</p>
+                    </div>
+                    <button type="button" class="secondary-btn" :disabled="previewLoading || !targeting?.canSubmit" @click="previewTargets">Preview</button>
+                </div>
+                <AsyncState :loading="previewLoading" :error="previewError" :empty="!preview" empty-title="Belum ada preview" empty-text="Pilih target lalu klik Preview untuk memastikan penerima valid.">
+                    <div class="metric-grid compact">
+                        <article class="metric-card"><span>Total</span><strong>{{ preview.total_targets ?? 0 }}</strong></article>
+                        <article class="metric-card"><span>Valid</span><strong>{{ preview.total_valid ?? 0 }}</strong></article>
+                        <article class="metric-card"><span>Invalid</span><strong>{{ preview.total_invalid ?? 0 }}</strong></article>
+                    </div>
                     <div class="data-list preview-list">
-                        <article v-for="target in preview.targets || []" :key="target.identifier" class="list-row"><div><strong>{{ target.identifier }}</strong><small>{{ target.name || '-' }}</small></div></article>
+                        <article v-for="target in preview.valid_targets || []" :key="target.identifier" class="list-row"><div><strong>{{ target.identifier }}</strong><small>{{ target.name_snapshot || '-' }}</small></div><StatusPill status="approved" /></article>
+                        <article v-for="target in preview.invalid_targets || []" :key="`invalid-${target.identifier}`" class="list-row"><div><strong>{{ target.identifier }}</strong><small>{{ target.reason || 'Tidak valid' }}</small></div><StatusPill status="rejected" /></article>
                     </div>
                 </AsyncState>
             </section>
         </div>
 
-        <section class="panel-block">
-            <div class="section-heading"><h2>Pilih target penerima</h2><p>Filter data {{ form.target_role }}, lalu centang penerima distribusi. Hanya target dengan akun login yang bisa dipublish.</p></div>
-            <form class="filter-bar" @submit.prevent="loadTargets">
-                <input v-model="targetFilters.search" :placeholder="form.target_role === 'mahasiswa' ? 'Cari nama / NIM' : 'Cari nama / kode dosen'" />
-                <input v-if="form.target_role === 'mahasiswa'" v-model.number="targetFilters.angkatan" type="number" placeholder="Angkatan" />
-                <input v-model="targetFilters.status" placeholder="Status, contoh A" />
-                <select v-model="targetFilters.has_account">
-                    <option value="1">Punya akun</option>
-                    <option value="">Semua data</option>
-                    <option value="0">Belum punya akun</option>
-                </select>
-                <button type="submit">Cari target</button>
-            </form>
+        <TargetPicker @change="targeting = $event" />
 
-            <AsyncState :loading="targetLoading" :error="targetError" :empty="targets.length === 0" empty-title="Belum ada target" empty-text="Gunakan filter untuk mencari mahasiswa/dosen." @retry="loadTargets">
-                <div class="bulk-actions">
-                    <strong>{{ selectedIdentifiers.length }} target dipilih</strong>
-                    <button type="button" class="secondary-btn" @click="selectPageTargets">Pilih semua halaman ini</button>
-                    <button type="button" class="ghost-btn" @click="clearTargets">Kosongkan pilihan</button>
+        <section class="panel-block publish-panel">
+            <div class="section-heading">
+                <div>
+                    <h2>Simpan distribusi</h2>
+                    <p>{{ targeting?.summary || 'Pilih target penerima terlebih dahulu.' }}</p>
                 </div>
-                <div class="table-wrap">
-                    <table>
-                        <thead><tr><th>Pilih</th><th>Identifier</th><th>Nama</th><th>Angkatan</th><th>Status</th><th>Akun</th></tr></thead>
-                        <tbody>
-                            <tr v-for="target in targets" :key="target.identifier">
-                                <td><input type="checkbox" :value="target.identifier" :disabled="!target.has_account" v-model="selectedIdentifiers" /></td>
-                                <td><strong>{{ target.identifier }}</strong></td>
-                                <td>{{ target.name || '-' }}</td>
-                                <td>{{ target.angkatan || '-' }}</td>
-                                <td>{{ target.status || '-' }}</td>
-                                <td><StatusPill :status="target.has_account ? 'approved' : 'rejected'" /></td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div class="page-actions">
+                    <button type="button" class="secondary-btn" :disabled="!targeting?.canSubmit" @click="previewTargets">Preview target</button>
+                    <button type="button" :disabled="!targeting?.canSubmit" @click="saveDistribution">Simpan draft</button>
                 </div>
-                <div class="pagination-row">
-                    <button type="button" class="secondary-btn" :disabled="targetMeta.current_page <= 1" @click="changeTargetPage(targetMeta.current_page - 1)">Sebelumnya</button>
-                    <span>Halaman {{ targetMeta.current_page || 1 }} dari {{ targetMeta.last_page || 1 }} · {{ targetMeta.total || 0 }} data</span>
-                    <button type="button" class="secondary-btn" :disabled="targetMeta.current_page >= targetMeta.last_page" @click="changeTargetPage(targetMeta.current_page + 1)">Berikutnya</button>
-                </div>
-            </AsyncState>
+            </div>
         </section>
 
         <section class="panel-block">
-            <div class="section-heading"><h2>Daftar distribution</h2><button type="button" class="secondary-btn" @click="load">Refresh</button></div>
-            <AsyncState :loading="loading" :error="error" :empty="distributions.length === 0" empty-title="Belum ada distribution" empty-text="Distribution draft/published akan tampil di sini." @retry="load">
+            <div class="section-heading"><h2>Daftar distribusi</h2></div>
+            <AsyncState :loading="loading" :error="error" :empty="distributions.length === 0" empty-title="Belum ada distribusi" empty-text="Distribusi draft/published akan tampil di sini." @retry="load">
                 <div class="table-wrap">
                     <table>
-                        <thead><tr><th>Distribution</th><th>Target</th><th>Status</th><th>Penerima</th><th>Aksi</th></tr></thead>
+                        <thead><tr><th>Distribusi</th><th>Target</th><th>Status</th><th>Penerima</th><th>Aksi</th></tr></thead>
                         <tbody>
                             <tr v-for="item in distributions" :key="item.distribution_id" :class="selectedId === item.distribution_id ? 'selected-row' : ''">
                                 <td><strong>{{ item.title }}</strong><small>{{ item.description || '-' }}</small></td>
@@ -94,8 +79,8 @@
         </section>
 
         <section v-if="selectedId" class="panel-block">
-            <div class="section-heading"><h2>Penerima distribution #{{ selectedId }}</h2><button type="button" class="secondary-btn" @click="loadRecipients">Refresh</button></div>
-            <AsyncState :loading="recipientLoading" :error="recipientError" :empty="recipients.length === 0" empty-title="Belum ada penerima" empty-text="Publish distribution untuk membuat recipients.">
+            <div class="section-heading"><h2>Penerima distribusi #{{ selectedId }}</h2><button type="button" class="secondary-btn" @click="loadRecipients">Refresh</button></div>
+            <AsyncState :loading="recipientLoading" :error="recipientError" :empty="recipients.length === 0" empty-title="Belum ada penerima" empty-text="Publish distribusi untuk membuat daftar penerima.">
                 <div class="table-wrap">
                     <table>
                         <thead><tr><th>Penerima</th><th>Status</th><th>File</th><th>Upload</th></tr></thead>
@@ -119,7 +104,9 @@ import { onMounted, reactive, ref } from 'vue';
 import AsyncState from '../../components/AsyncState.vue';
 import PageHeader from '../../components/PageHeader.vue';
 import StatusPill from '../../components/StatusPill.vue';
+import TargetPicker from '../../components/TargetPicker.vue';
 import { arsipApi } from '../../services/arsipApi';
+import { confirmAction } from '../../services/dialogs';
 import { toErrorMessage } from '../../services/http';
 import { useAppStore } from '../../stores/appStore';
 
@@ -133,66 +120,16 @@ const recipientError = ref('');
 const distributions = ref([]);
 const recipients = ref([]);
 const preview = ref(null);
-const targets = ref([]);
-const targetMeta = ref({ current_page: 1, last_page: 1, per_page: 25, total: 0 });
-const targetLoading = ref(false);
-const targetError = ref('');
-const selectedIdentifiers = ref([]);
 const selectedId = ref('');
-const form = reactive({ title: '', description: '', target_role: 'mahasiswa', scope_type: 'specific' });
-const targetFilters = reactive({ search: '', angkatan: '', status: 'A', has_account: '1', page: 1 });
+const targeting = ref(null);
+const form = reactive({ title: '', description: '' });
 
 function payload() {
     return {
         ...form,
-        scope_type: 'specific',
-        target_filters: {},
-        target_identifiers: selectedIdentifiers.value,
-        target_segment_ids: [],
+        ...targeting.value.payload,
     };
 }
-
-function targetQuery(page = targetFilters.page) {
-    return {
-        role: form.target_role,
-        search: targetFilters.search,
-        angkatan: form.target_role === 'mahasiswa' ? targetFilters.angkatan : '',
-        status: targetFilters.status,
-        has_account: targetFilters.has_account,
-        per_page: 25,
-        page,
-    };
-}
-
-async function loadTargets(page = 1) {
-    targetLoading.value = true;
-    targetError.value = '';
-    targetFilters.page = page;
-    try {
-        const data = await arsipApi.adminTargets(targetQuery(page));
-        targets.value = data.targets || [];
-        targetMeta.value = data.meta || { current_page: 1, last_page: 1, per_page: 25, total: 0 };
-    } catch (err) { targetError.value = toErrorMessage(err); }
-    finally { targetLoading.value = false; }
-}
-
-function selectPageTargets() {
-    const merged = new Set(selectedIdentifiers.value);
-    targets.value.filter((target) => target.has_account).forEach((target) => merged.add(target.identifier));
-    selectedIdentifiers.value = Array.from(merged);
-}
-
-function clearTargets() { selectedIdentifiers.value = []; }
-
-function resetTargets() {
-    selectedIdentifiers.value = [];
-    targetFilters.page = 1;
-    targetFilters.angkatan = '';
-    preview.value = null;
-    loadTargets();
-}
-
-function changeTargetPage(page) { loadTargets(page); }
 
 async function load() {
     loading.value = true;
@@ -204,20 +141,29 @@ async function load() {
 }
 
 async function saveDistribution() {
-    if (selectedIdentifiers.value.length === 0) {
-        app.notify('error', 'Pilih minimal satu target penerima.');
+    if (!targeting.value?.canSubmit) {
+        app.notify('error', 'Pilih target penerima terlebih dahulu.');
         return;
     }
 
+    const confirmed = await confirmAction({
+        title: 'Simpan draft distribusi?',
+        text: `Target: ${targeting.value.summary}. Draft bisa dipublish setelah dicek.`,
+        confirmText: 'Simpan draft',
+    });
+    if (!confirmed) return;
+
     await arsipApi.createDistribution(payload());
-    app.notify('success', 'Distribution berhasil dibuat.');
+    app.notify('success', 'Distribusi berhasil dibuat.');
     form.title = '';
+    form.description = '';
+    preview.value = null;
     await load();
 }
 
 async function previewTargets() {
-    if (selectedIdentifiers.value.length === 0) {
-        previewError.value = 'Pilih minimal satu target penerima.';
+    if (!targeting.value?.canSubmit) {
+        previewError.value = 'Pilih target penerima terlebih dahulu.';
         return;
     }
 
@@ -229,8 +175,16 @@ async function previewTargets() {
 }
 
 async function publish(item) {
+    const confirmed = await confirmAction({
+        title: 'Publish distribusi?',
+        text: 'Daftar penerima akan dibuat dan file bisa mulai diupload per penerima.',
+        confirmText: 'Publish',
+        icon: 'warning',
+    });
+    if (!confirmed) return;
+
     await arsipApi.publishDistribution(item.distribution_id);
-    app.notify('success', 'Distribution berhasil dipublish.');
+    app.notify('success', 'Distribusi berhasil dipublish.');
     await load();
 }
 
@@ -252,6 +206,14 @@ async function uploadRecipient(event, recipient) {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+
+    const confirmed = await confirmAction({
+        title: 'Upload file penerima?',
+        text: `${recipient.identifier} - ${recipient.name_snapshot || 'tanpa nama'}`,
+        confirmText: 'Upload',
+    });
+    if (!confirmed) return;
+
     const formData = new FormData();
     formData.append('file', file);
     await arsipApi.uploadRecipientFile(recipient.recipient_id, formData);
@@ -259,5 +221,5 @@ async function uploadRecipient(event, recipient) {
     await loadRecipients();
 }
 
-onMounted(() => { load(); loadTargets(); });
+onMounted(load);
 </script>
