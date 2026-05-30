@@ -105,6 +105,8 @@ th, td { padding: var(--space-md); border-bottom: 1px solid var(--line); text-al
 th { color: var(--muted); font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; }
 td strong, td small { display: block; }
 tbody tr:last-child td { border-bottom: 0; }
+.bulk-actions, .pagination-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); margin: 0 0 var(--space-md); color: var(--muted); }
+.pagination-row { margin: var(--space-md) 0 0; }
 
 .status-pill { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 0.25rem 0.58rem; font-size: 0.78rem; font-weight: 900; white-space: nowrap; }
 .status-pill.ok { color: var(--ok); background: color-mix(in oklch, var(--ok), white 88%); }

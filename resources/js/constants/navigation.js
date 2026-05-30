@@ -4,9 +4,6 @@ export const adminNavigation = [
     { label: 'Permintaan Berkas', name: 'admin.requests' },
     { label: 'Monitoring Assignment', name: 'admin.monitoring' },
     { label: 'Distribusi Berkas', name: 'admin.distributions' },
-    { label: 'Segment', name: 'admin.segments' },
-    { label: 'Beasiswa', name: 'admin.scholarships' },
-    { label: 'Export ZIP', name: 'admin.exports' },
     { label: 'Audit Log', name: 'admin.audit' },
     { label: 'Pengaturan', name: 'admin.settings' },
 ];

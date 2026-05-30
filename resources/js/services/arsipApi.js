@@ -19,6 +19,7 @@ export const arsipApi = {
     uploadForUser: (formData) => upload('/admin/files/upload-for-user', formData),
 
     adminRequests: (params) => get('/admin/requests', params),
+    adminTargets: (params) => get('/admin/targets', params),
     createRequest: (payload) => post('/admin/requests', payload),
     updateRequest: (id, payload) => put(`/admin/requests/${id}`, payload),
     requestDetail: (id) => get(`/admin/requests/${id}`),
