@@ -315,9 +315,6 @@ async function loadArchive() {
         ]);
         categories.value = categoryData.categories || [];
         files.value = fileData.files || [];
-        if (!selectedFolder.value) {
-            selectedFolder.value = { key: 'group:personal', type: 'group', label: 'Arsip Pribadi', groupKey: 'group:personal', groupLabel: 'Arsip Pribadi' };
-        }
     } catch (err) {
         archiveError.value = toErrorMessage(err);
     } finally {
