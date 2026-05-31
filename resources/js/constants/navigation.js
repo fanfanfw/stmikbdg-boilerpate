@@ -4,7 +4,6 @@ export const adminNavigation = [
     { label: 'Permintaan Berkas', name: 'admin.requests' },
     { label: 'Distribusi Berkas', name: 'admin.distributions' },
     { label: 'Audit Log', name: 'admin.audit' },
-    { label: 'Pengaturan', name: 'admin.settings' },
 ];
 
 export const userNavigation = [
