@@ -63,6 +63,11 @@ export const arsipApi = {
     publishDistribution: (id) => post(`/admin/distributions/${id}/publish`),
     distributionRecipients: (id, params) => get(`/admin/distributions/${id}/recipients`, params),
     uploadRecipientFile: (id, formData) => upload(`/admin/distribution-recipients/${id}/file`, formData),
+    distributionBulkUploadJobs: (distributionId, params) => get(`/admin/distributions/${distributionId}/bulk-upload-jobs`, params),
+    createDistributionBulkUploadJob: (distributionId, formData) => upload(`/admin/distributions/${distributionId}/bulk-upload-jobs`, formData),
+    distributionBulkUploadJob: (jobId) => get(`/admin/distribution-bulk-upload-jobs/${jobId}`),
+    confirmDistributionBulkUploadJob: (jobId) => post(`/admin/distribution-bulk-upload-jobs/${jobId}/confirm`),
+    cancelDistributionBulkUploadJob: (jobId) => post(`/admin/distribution-bulk-upload-jobs/${jobId}/cancel`),
     userDistributions: () => get('/distributions'),
     downloadDistributionFile: (file) => download(`/distribution-files/${file.file_id}/download`, file.display_filename || file.original_filename),
 
