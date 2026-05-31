@@ -4,41 +4,18 @@
             <template #actions><button type="button" class="secondary-btn" @click="load">Refresh daftar</button></template>
         </PageHeader>
 
-        <div class="two-column wide-first request-builder-grid">
-            <section class="panel-block">
-                <div class="section-heading">
-                    <div>
-                        <h2>Detail distribusi</h2>
-                        <p>Judul dan catatan yang membantu admin mengenali batch pengiriman file.</p>
-                    </div>
+        <section class="panel-block">
+            <div class="section-heading">
+                <div>
+                    <h2>Detail distribusi</h2>
+                    <p>Judul dan catatan yang membantu admin mengenali batch pengiriman file.</p>
                 </div>
-                <form class="form-grid" @submit.prevent="saveDistribution">
-                    <label>Judul<input v-model="form.title" required placeholder="Sertifikat Seminar AI 2026" /></label>
-                    <label class="wide">Deskripsi<textarea v-model="form.description" rows="3" placeholder="Catatan internal atau instruksi singkat" /></label>
-                </form>
-            </section>
-
-            <section class="panel-block preview-panel">
-                <div class="section-heading">
-                    <div>
-                        <h2>Preview target</h2>
-                        <p>{{ targeting?.summary || 'Target belum dihitung' }}</p>
-                    </div>
-                    <button type="button" class="secondary-btn" :disabled="previewLoading || !targeting?.canSubmit" @click="previewTargets">Preview</button>
-                </div>
-                <AsyncState :loading="previewLoading" :error="previewError" :empty="!preview" empty-title="Belum ada preview" empty-text="Pilih target lalu klik Preview untuk memastikan penerima valid.">
-                    <div class="metric-grid compact">
-                        <article class="metric-card"><span>Total</span><strong>{{ preview.total_targets ?? 0 }}</strong></article>
-                        <article class="metric-card"><span>Valid</span><strong>{{ preview.total_valid ?? 0 }}</strong></article>
-                        <article class="metric-card"><span>Invalid</span><strong>{{ preview.total_invalid ?? 0 }}</strong></article>
-                    </div>
-                    <div class="data-list preview-list">
-                        <article v-for="target in preview.valid_targets || []" :key="target.identifier" class="list-row"><div><strong>{{ target.identifier }}</strong><small>{{ target.name_snapshot || '-' }}</small></div><StatusPill status="approved" /></article>
-                        <article v-for="target in preview.invalid_targets || []" :key="`invalid-${target.identifier}`" class="list-row"><div><strong>{{ target.identifier }}</strong><small>{{ target.reason || 'Tidak valid' }}</small></div><StatusPill status="rejected" /></article>
-                    </div>
-                </AsyncState>
-            </section>
-        </div>
+            </div>
+            <form class="form-grid" @submit.prevent="saveDistribution">
+                <label>Judul<input v-model="form.title" required placeholder="Sertifikat Seminar AI 2026" /></label>
+                <label class="wide">Deskripsi<textarea v-model="form.description" rows="3" placeholder="Catatan internal atau instruksi singkat" /></label>
+            </form>
+        </section>
 
         <TargetPicker @change="targeting = $event" />
 
@@ -52,6 +29,19 @@
                     <button type="button" class="secondary-btn" :disabled="!targeting?.canSubmit" @click="previewTargets">Preview target</button>
                     <button type="button" :disabled="!targeting?.canSubmit" @click="saveDistribution">Simpan draft</button>
                 </div>
+            </div>
+            <div class="target-preview-result">
+                <AsyncState :loading="previewLoading" :error="previewError" :empty="!preview" empty-title="Belum ada preview" empty-text="Klik Preview target untuk memastikan penerima valid sebelum draft disimpan.">
+                    <div class="metric-grid compact">
+                        <article class="metric-card"><span>Total</span><strong>{{ preview.total_targets ?? 0 }}</strong></article>
+                        <article class="metric-card"><span>Valid</span><strong>{{ preview.total_valid ?? 0 }}</strong></article>
+                        <article class="metric-card"><span>Invalid</span><strong>{{ preview.total_invalid ?? 0 }}</strong></article>
+                    </div>
+                    <div class="data-list preview-list">
+                        <article v-for="target in preview.valid_targets || []" :key="target.identifier" class="list-row"><div><strong>{{ target.identifier }}</strong><small>{{ target.name_snapshot || '-' }}</small></div><StatusPill status="approved" /></article>
+                        <article v-for="target in preview.invalid_targets || []" :key="`invalid-${target.identifier}`" class="list-row"><div><strong>{{ target.identifier }}</strong><small>{{ target.reason || 'Tidak valid' }}</small></div><StatusPill status="rejected" /></article>
+                    </div>
+                </AsyncState>
             </div>
         </section>
 
@@ -91,7 +81,12 @@
                 <section class="notice-box info">
                     <div>
                         <strong>Bulk upload ZIP</strong>
-                        <p>Upload ZIP sertifikat/file personal. Format nama file: NIM.pdf atau NIM - Nama.pdf. Sistem akan membuat preview matching sebelum file disimpan ke penerima.</p>
+                        <p>Upload satu ZIP berisi file personal. Sistem mencocokkan file ke penerima dari identifier pada nama file, lalu menampilkan preview sebelum file disimpan.</p>
+                        <ul class="bulk-upload-guide">
+                            <li>Mahasiswa: nama file harus memuat NIM, contoh <code>22123456.pdf</code> atau <code>22123456 - Nama Mahasiswa.pdf</code>.</li>
+                            <li>Dosen: nama file harus memuat kode dosen atau <code>kd_dosen</code>, contoh <code>RP.pdf</code>, <code>LA - SK Mengajar.pdf</code>, atau <code>dokumen_DV_2024.pdf</code>. Jangan pakai NIDN, email, atau nama dosen kecuali identifier sistem sudah diubah.</li>
+                            <li>File boleh langsung di root ZIP atau di dalam subfolder. Hanya file dengan status <strong>File cocok</strong> yang akan disimpan saat dikonfirmasi.</li>
+                        </ul>
                     </div>
                 </section>
 
