@@ -155,7 +155,7 @@
                 <form class="filter-bar request-monitor-filter" @submit.prevent>
                     <select v-model="fileFilters.status"><option value="all">Semua file</option><option value="waiting_verification">Menunggu verifikasi</option><option value="approved">Disetujui</option><option value="rejected">Ditolak</option><option value="late">Terlambat</option></select>
                     <input v-model="fileFilters.search" placeholder="Cari file/target/nama" />
-                    <button type="button" class="secondary-btn" :disabled="downloadLoading || selectedRequestFiles.length === 0" @click="downloadSelectedFiles">{{ downloadLoading ? 'Mengunduh...' : 'Download selected' }}</button>
+                    <button type="button" class="secondary-btn" :disabled="downloadLoading || selectedRequestFiles.length === 0" @click="downloadSelectedFiles">{{ downloadLoading ? 'Membuat ZIP...' : 'Download ZIP selected' }}</button>
                     <button type="button" class="ghost-btn" :disabled="downloadLoading || selectedRequestFileIds.length === 0" @click="selectedRequestFileIds = []">Kosongkan pilihan</button>
                 </form>
                 <div class="bulk-actions request-bulk-actions">
@@ -185,6 +185,31 @@
                     </table>
                 </div>
                 <p v-else class="muted-card inline-empty">Belum ada file yang terkumpul sesuai filter.</p>
+
+                <section class="export-inline-panel">
+                    <div class="section-heading compact-heading">
+                        <div>
+                            <h2>Export ZIP request</h2>
+                            <p>ZIP dibuat async. Jika masih queued/processing, jalankan worker queue lalu refresh.</p>
+                        </div>
+                        <button type="button" class="secondary-btn" :disabled="exportJobLoading" @click="loadRequestExportJobs">Refresh export</button>
+                    </div>
+                    <AsyncState :loading="exportJobLoading" :error="exportJobError" :empty="requestExportJobs.length === 0" empty-title="Belum ada export request" empty-text="Pilih file lalu klik Download ZIP selected untuk membuat job export.">
+                        <div class="table-wrap">
+                            <table>
+                                <thead><tr><th>Job</th><th>Status</th><th>Ukuran</th><th>Aksi</th></tr></thead>
+                                <tbody>
+                                    <tr v-for="job in requestExportJobs" :key="job.export_job_id">
+                                        <td>#{{ job.export_job_id }}<small>{{ dateTime(job.created_at) }}</small></td>
+                                        <td><StatusPill :status="job.status" /><small v-if="job.error_message">{{ job.error_message }}</small></td>
+                                        <td>{{ fileSize(job.file_size_bytes) }}</td>
+                                        <td><button type="button" class="secondary-btn" :disabled="job.status !== 'completed'" @click="downloadExportJob(job)">Download ZIP</button></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </AsyncState>
+                </section>
             </section>
 
             <section v-if="activeTab === 'activity'" class="panel-block">
@@ -218,7 +243,9 @@ const app = useAppStore();
 const loading = ref(false);
 const actionLoading = ref(false);
 const error = ref('');
+const exportJobError = ref('');
 const requestData = ref(null);
+const requestExportJobs = ref([]);
 const progress = ref({});
 const fileSummary = ref({});
 const activeTab = ref('summary');
@@ -231,6 +258,7 @@ const appendPreview = ref(null);
 const appendPickerKey = ref(0);
 const bulkLoading = ref(false);
 const downloadLoading = ref(false);
+const exportJobLoading = ref(false);
 const adminUploadInput = ref(null);
 const pendingUploadAssignment = ref(null);
 const selectedAssignmentIds = ref([]);
@@ -400,11 +428,26 @@ async function refreshDetailSnapshot() {
     applyDetailData(data);
 }
 
+async function loadRequestExportJobs() {
+    if (!route.params.request_id) return;
+    exportJobLoading.value = true;
+    exportJobError.value = '';
+    try {
+        const data = await arsipApi.exportJobs({ export_type: 'request' });
+        requestExportJobs.value = (data.export_jobs || [])
+            .filter((job) => Number(job.filters?.request_id) === Number(route.params.request_id));
+    } catch (err) {
+        exportJobError.value = toErrorMessage(err);
+    } finally {
+        exportJobLoading.value = false;
+    }
+}
+
 async function loadDetail() {
     loading.value = true;
     error.value = '';
     try {
-        await refreshDetailSnapshot();
+        await Promise.all([refreshDetailSnapshot(), loadRequestExportJobs()]);
     } catch (err) {
         error.value = toErrorMessage(err);
     } finally {
@@ -684,14 +727,33 @@ async function downloadRequestFile(requestFile) {
     await arsipApi.downloadRequestFile(requestFile);
 }
 
+async function downloadExportJob(job) {
+    await arsipApi.downloadExportJob(job);
+}
+
 async function downloadSelectedFiles() {
-    if (downloadLoading.value || selectedRequestFiles.value.length === 0) return;
+    if (downloadLoading.value || selectedRequestFiles.value.length === 0 || !requestData.value) return;
+
+    const confirmed = await confirmAction({
+        title: 'Buat ZIP file terpilih?',
+        text: `${selectedRequestFiles.value.length} file akan dibuat menjadi ZIP dengan folder ${requestData.value.title}.`,
+        confirmText: 'Buat ZIP',
+    });
+    if (!confirmed) return;
 
     downloadLoading.value = true;
     try {
-        for (const item of selectedRequestFiles.value) {
-            await downloadRequestFile(item.file);
-        }
+        await arsipApi.createExportJob({
+            export_type: 'request',
+            filters: {
+                request_id: requestData.value.request_id,
+                request_file_ids: selectedRequestFileIds.value,
+                download_filename: requestData.value.title,
+            },
+        });
+        app.notify('success', 'Export ZIP dibuat. Jalankan worker queue jika status belum selesai, lalu download dari panel Export ZIP request.');
+        selectedRequestFileIds.value = [];
+        await loadRequestExportJobs();
     } catch (err) {
         app.notify('error', toErrorMessage(err));
     } finally {
