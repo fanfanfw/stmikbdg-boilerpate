@@ -9,7 +9,7 @@
                 <form class="stack-form" @submit.prevent="createCategory">
                     <label>Nama kategori<input v-model="categoryForm.name" required placeholder="Dokumen Pribadi" /></label>
                     <label>Deskripsi<textarea v-model="categoryForm.description" rows="3" /></label>
-                    <button type="submit">Buat kategori</button>
+                    <button type="submit" :disabled="actionLoading">{{ actionLoading ? 'Menyimpan...' : 'Buat kategori' }}</button>
                 </form>
                 <div class="data-list">
                     <button type="button" :class="['select-row', selectedFolderKey === 'personal:root' ? 'active' : '']" @click="selectFolder(rootFolder)">
@@ -29,7 +29,7 @@
                     <label>Kategori<select v-model="selectedCategoryId"><option value="">Tanpa kategori</option><option v-for="category in personalCategories" :key="category.category_id" :value="category.category_id">{{ category.name }}</option></select></label>
                     <label>Nama tampil<input v-model="uploadForm.display_filename" placeholder="Opsional" /></label>
                     <label>File<input ref="fileInput" type="file" required @change="onFileChange" /></label>
-                    <button type="submit" :disabled="!uploadForm.file">Upload</button>
+                    <button type="submit" :disabled="actionLoading || !uploadForm.file">{{ actionLoading ? 'Mengupload...' : 'Upload' }}</button>
                 </form>
             </section>
         </div>
@@ -51,8 +51,8 @@
                         <small>v{{ file.version_number }} · {{ file.is_current ? 'current' : 'replaced' }} · {{ bytes(file.file_size_bytes) }}</small>
                         <StatusPill :status="file.status" />
                         <div class="action-cell">
-                            <button type="button" class="secondary-btn" @click="download(file)">Download</button>
-                            <button v-if="selectedFolder.type !== 'request' && file.source_type === 'personal'" type="button" class="ghost-btn" @click="deleteFile(file)">Hapus</button>
+                            <button type="button" class="secondary-btn" :disabled="actionLoading" @click="download(file)">Download</button>
+                            <button v-if="selectedFolder.type !== 'request' && file.source_type === 'personal'" type="button" class="ghost-btn danger-btn" :disabled="actionLoading" @click="deleteFile(file)">Hapus</button>
                         </div>
                     </article>
                 </div>
@@ -67,12 +67,14 @@ import AsyncState from '../../components/AsyncState.vue';
 import PageHeader from '../../components/PageHeader.vue';
 import StatusPill from '../../components/StatusPill.vue';
 import { arsipApi } from '../../services/arsipApi';
+import { confirmAction, promptText } from '../../services/dialogs';
 import { toErrorMessage } from '../../services/http';
 import { useAppStore } from '../../stores/appStore';
 import { bytes, dateTime } from '../../utils/format';
 
 const app = useAppStore();
 const loading = ref(false);
+const actionLoading = ref(false);
 const error = ref('');
 const categories = ref([]);
 const files = ref([]);
@@ -142,19 +144,74 @@ async function load() {
     } catch (err) { error.value = toErrorMessage(err); } finally { loading.value = false; }
 }
 
-async function createCategory() { await arsipApi.createCategory({ category_type: 'personal', ...categoryForm }); app.notify('success', 'Kategori dibuat.'); categoryForm.name = ''; categoryForm.description = ''; await load(); }
+async function createCategory() {
+    actionLoading.value = true;
+    try {
+        await arsipApi.createCategory({ category_type: 'personal', ...categoryForm });
+        app.notify('success', 'Kategori dibuat.');
+        categoryForm.name = '';
+        categoryForm.description = '';
+        await load();
+    } catch (err) {
+        app.notify('error', toErrorMessage(err));
+    } finally {
+        actionLoading.value = false;
+    }
+}
+
 async function uploadPersonalFile() {
+    if (!uploadForm.file) return;
     const formData = new FormData();
     formData.append('file', uploadForm.file);
     if (selectedCategoryId.value) formData.append('category_id', selectedCategoryId.value);
     if (uploadForm.display_filename) formData.append('display_filename', uploadForm.display_filename);
-    await arsipApi.uploadFile(formData);
-    app.notify('success', 'File berhasil diupload.');
-    uploadForm.file = null; uploadForm.display_filename = ''; if (fileInput.value) fileInput.value.value = '';
-    await Promise.all([load(), app.loadSummary()]);
+
+    actionLoading.value = true;
+    try {
+        await arsipApi.uploadFile(formData);
+        app.notify('success', 'File berhasil diupload.');
+        uploadForm.file = null;
+        uploadForm.display_filename = '';
+        if (fileInput.value) fileInput.value.value = '';
+        await Promise.all([load(), app.loadSummary()]);
+    } catch (err) {
+        app.notify('error', toErrorMessage(err));
+    } finally {
+        actionLoading.value = false;
+    }
 }
+
 async function download(file) { await arsipApi.downloadFile(file); }
-async function deleteFile(file) { const reason = window.prompt('Alasan hapus file', 'Dihapus dari UI'); if (reason === null) return; await arsipApi.deleteFile(file.file_id, reason); app.notify('success', 'File dihapus secara soft delete.'); await load(); }
+
+async function deleteFile(file) {
+    const reason = await promptText({
+        title: 'Hapus file?',
+        text: file.display_filename,
+        inputLabel: 'Alasan hapus',
+        placeholder: 'Tulis alasan penghapusan.',
+        confirmText: 'Hapus',
+    });
+    if (!reason) return;
+
+    const confirmed = await confirmAction({
+        title: 'Konfirmasi hapus file?',
+        text: 'File akan masuk soft delete dan dapat direstore oleh admin.',
+        confirmText: 'Hapus file',
+        icon: 'warning',
+    });
+    if (!confirmed) return;
+
+    actionLoading.value = true;
+    try {
+        await arsipApi.deleteFile(file.file_id, reason);
+        app.notify('success', 'File dihapus secara soft delete.');
+        await load();
+    } catch (err) {
+        app.notify('error', toErrorMessage(err));
+    } finally {
+        actionLoading.value = false;
+    }
+}
 function fileIcon(extension) {
     const ext = String(extension || '').toLowerCase();
     if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return '🖼️';

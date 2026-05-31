@@ -1,7 +1,7 @@
 <template>
     <section class="page-stack">
         <PageHeader eyebrow="Permintaan berkas" title="Buat permintaan berkas" description="Atur detail request, pilih target penerima, preview target valid, lalu publish ketika sudah siap.">
-            <template #actions><button type="button" class="secondary-btn" @click="loadAll">Refresh daftar</button></template>
+            <template #actions><button type="button" class="secondary-btn" :disabled="loading" @click="loadAll">Refresh daftar</button></template>
         </PageHeader>
 
         <section class="panel-block">
@@ -11,7 +11,7 @@
                     <p>Instruksi dan batas unggahan yang akan dilihat penerima.</p>
                 </div>
             </div>
-            <form class="form-grid" @submit.prevent="saveRequest">
+            <form id="request-create-form" class="form-grid" @submit.prevent="saveRequest">
                 <label>Judul<input v-model="form.title" required placeholder="Contoh: Akta Kelahiran Angkatan 2022" /></label>
                 <label>Maks file<input v-model.number="form.max_files" type="number" min="1" /></label>
                 <label>Maks ukuran MB<input v-model.number="form.max_file_size_mb" type="number" min="1" placeholder="Default setting" /></label>
@@ -41,7 +41,7 @@
                     <h2>Daftar target final</h2>
                     <p>{{ targeting?.summary || 'Target belum dihitung' }}</p>
                 </div>
-                <button type="button" class="secondary-btn" :disabled="previewLoading || !targeting?.canSubmit" @click="previewTargets">Validasi target</button>
+                <button type="button" class="secondary-btn" :disabled="previewLoading || !targeting?.canSubmit" @click="previewTargets">{{ previewLoading ? 'Memvalidasi...' : 'Validasi target' }}</button>
             </div>
             <AsyncState :loading="previewLoading" :error="previewError" :empty="!preview" empty-title="Belum ada daftar target" empty-text="Pilih target penerima, lalu klik Validasi target untuk melihat daftar final yang akan menerima request.">
                 <div class="metric-grid compact">
@@ -52,11 +52,11 @@
                 <div class="data-list preview-list">
                     <article v-for="target in preview.valid_targets || []" :key="target.identifier" class="list-row">
                         <div><strong>{{ target.identifier }}</strong><small>{{ target.name_snapshot || '-' }}</small></div>
-                        <StatusPill status="approved" />
+                        <span class="status-pill ok">Valid</span>
                     </article>
                     <article v-for="target in preview.invalid_targets || []" :key="`invalid-${target.identifier}`" class="list-row">
                         <div><strong>{{ target.identifier }}</strong><small>{{ target.reason || 'Tidak valid' }}</small></div>
-                        <StatusPill status="rejected" />
+                        <span class="status-pill danger">Invalid</span>
                     </article>
                 </div>
             </AsyncState>
@@ -69,8 +69,8 @@
                     <p>{{ targeting?.summary || 'Pilih target penerima terlebih dahulu.' }}</p>
                 </div>
                 <div class="page-actions">
-                    <button type="button" class="secondary-btn" :disabled="saving || !targeting?.canSubmit" @click="previewTargets">Validasi target</button>
-                    <button type="button" :disabled="saving || !targeting?.canSubmit" @click="saveRequest">Simpan draft</button>
+                    <button type="button" class="secondary-btn" :disabled="saving || previewLoading || !targeting?.canSubmit" @click="previewTargets">{{ previewLoading ? 'Memvalidasi...' : 'Validasi target' }}</button>
+                    <button type="submit" form="request-create-form" :disabled="saving || previewLoading || !targeting?.canSubmit">{{ saving ? 'Menyimpan...' : 'Simpan draft' }}</button>
                 </div>
             </div>
         </section>
@@ -88,7 +88,7 @@
                                 <td><StatusPill :status="request.status" /></td>
                                 <td>{{ request.assignments_count ?? 0 }}</td>
                                 <td class="action-cell">
-                                    <button v-if="request.status === 'draft'" type="button" class="secondary-btn" @click="publish(request)">Publish</button>
+                                    <button v-if="request.status === 'draft'" type="button" class="secondary-btn" :disabled="publishingId === request.request_id" @click="publish(request)">{{ publishingId === request.request_id ? 'Publishing...' : 'Publish' }}</button>
                                     <RouterLink class="text-link" :to="{ name: 'admin.requests.show', params: { request_id: request.request_id } }">Detail</RouterLink>
                                 </td>
                             </tr>
@@ -116,6 +116,7 @@ const app = useAppStore();
 const loading = ref(false);
 const saving = ref(false);
 const previewLoading = ref(false);
+const publishingId = ref(null);
 const error = ref('');
 const previewError = ref('');
 const requests = ref([]);
@@ -153,8 +154,16 @@ async function loadAll() {
 }
 
 async function saveRequest() {
+    if (!form.title?.trim()) {
+        app.notify('error', 'Judul request wajib diisi.');
+        return;
+    }
     if (!targeting.value?.canSubmit) {
         app.notify('error', 'Pilih target penerima terlebih dahulu.');
+        return;
+    }
+    if (selectedExtensions.value.length === 0) {
+        app.notify('error', 'Pilih minimal satu ekstensi yang diizinkan.');
         return;
     }
 
@@ -207,9 +216,16 @@ async function publish(request) {
     });
     if (!confirmed) return;
 
-    await arsipApi.publishRequest(request.request_id);
-    app.notify('success', 'Request berhasil dipublish.');
-    await loadAll();
+    publishingId.value = request.request_id;
+    try {
+        await arsipApi.publishRequest(request.request_id);
+        app.notify('success', 'Request berhasil dipublish.');
+        await loadAll();
+    } catch (err) {
+        app.notify('error', toErrorMessage(err));
+    } finally {
+        publishingId.value = null;
+    }
 }
 
 onMounted(loadAll);

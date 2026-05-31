@@ -5,7 +5,7 @@
             title="File explorer mahasiswa dan dosen"
             description="Pilih pengguna, buka folder/kategori, lalu kelola file arsip seperti explorer."
         >
-            <template #actions><button type="button" class="secondary-btn" @click="refreshAll">Refresh</button></template>
+            <template #actions><button type="button" class="secondary-btn" :disabled="peopleLoading || archiveLoading || jobLoading" @click="refreshAll">Refresh</button></template>
         </PageHeader>
 
         <section class="archive-explorer-grid">
@@ -18,12 +18,12 @@
                         <button type="button" :class="peopleFilters.role === 'mahasiswa' ? 'active' : ''" @click="setRole('mahasiswa')">Mahasiswa</button>
                         <button type="button" :class="peopleFilters.role === 'dosen' ? 'active' : ''" @click="setRole('dosen')">Dosen</button>
                     </div>
-                    <input v-model="peopleFilters.search" placeholder="Cari nama / NIM / kode dosen" />
+                    <input v-model="peopleFilters.search" placeholder="Cari nama / NIM / kode dosen" aria-label="Cari pengguna" />
                     <div class="mini-stack two-inputs">
                         <input v-if="peopleFilters.role === 'mahasiswa'" v-model="peopleFilters.angkatan" inputmode="numeric" placeholder="Angkatan" />
                         <input v-model="peopleFilters.status" placeholder="Status" />
                     </div>
-                    <button type="submit">Cari pengguna</button>
+                    <button type="submit" :disabled="peopleLoading">{{ peopleLoading ? 'Mencari...' : 'Cari pengguna' }}</button>
                 </form>
 
                 <AsyncState :loading="peopleLoading" :error="peopleError" :empty="people.length === 0" empty-title="Belum ada pengguna" empty-text="Ubah filter untuk mencari target arsip." @retry="loadPeople(peopleMeta.current_page || 1)">
@@ -35,9 +35,9 @@
                         </button>
                     </div>
                     <div class="pagination-row">
-                        <button type="button" class="secondary-btn" :disabled="peopleMeta.current_page <= 1" @click="loadPeople(peopleMeta.current_page - 1)">Sebelumnya</button>
+                        <button type="button" class="secondary-btn" :disabled="peopleLoading || peopleMeta.current_page <= 1" @click="loadPeople(peopleMeta.current_page - 1)">Sebelumnya</button>
                         <span>{{ peopleMeta.current_page || 1 }} / {{ peopleMeta.last_page || 1 }}</span>
-                        <button type="button" class="secondary-btn" :disabled="peopleMeta.current_page >= peopleMeta.last_page" @click="loadPeople(peopleMeta.current_page + 1)">Berikutnya</button>
+                        <button type="button" class="secondary-btn" :disabled="peopleLoading || peopleMeta.current_page >= peopleMeta.last_page" @click="loadPeople(peopleMeta.current_page + 1)">Berikutnya</button>
                     </div>
                 </AsyncState>
             </aside>
@@ -51,11 +51,12 @@
                     </div>
                     <div class="page-actions">
                         <button type="button" class="secondary-btn" :disabled="exportLoading || selectedFileIds.length === 0" @click="exportSelected">{{ exportLoading ? 'Membuat export...' : 'Export selected' }}</button>
-                        <button type="button" :disabled="exportLoading" @click="exportCurrentFolder">{{ exportLoading ? 'Membuat export...' : 'Export folder' }}</button>
+                        <button type="button" :disabled="exportLoading || visibleFiles.length === 0" @click="exportCurrentFolder">{{ exportLoading ? 'Membuat export...' : 'Export folder' }}</button>
                     </div>
                 </div>
-                <div v-else class="section-heading">
-                    <div><h2>Pilih pengguna</h2><p>File dan folder akan tampil setelah pengguna dipilih.</p></div>
+                <div v-else class="state-card muted-card explorer-empty-state">
+                    <strong>Pilih pengguna</strong>
+                    <p>File dan folder akan tampil setelah admin memilih mahasiswa atau dosen di panel kiri.</p>
                 </div>
 
                 <template v-if="selectedPerson">
@@ -75,32 +76,33 @@
                             <option value="all">Semua termasuk terhapus</option>
                             <option value="deleted">Hanya terhapus</option>
                         </select>
-                        <button type="submit" class="secondary-btn">Filter file</button>
+                        <button type="submit" class="secondary-btn" :disabled="archiveLoading">{{ archiveLoading ? 'Memfilter...' : 'Filter file' }}</button>
                     </form>
 
                     <AsyncState :loading="archiveLoading" :error="archiveError" :empty="folders.length === 0 && visibleFiles.length === 0" empty-title="Folder kosong" empty-text="Belum ada kategori atau file pada folder ini." @retry="loadArchive">
-                        <section v-if="folders.length" class="explorer-section">
+                        <section class="explorer-section">
                             <div class="section-heading compact-heading"><h2>Folder</h2></div>
-                            <div class="folder-grid">
+                            <div v-if="folders.length" class="folder-grid">
                                 <button v-for="folder in folders" :key="folder.key" type="button" class="folder-card" @click="selectFolder(folder)">
                                     <span class="folder-icon">📁</span>
                                     <strong>{{ folder.label }}</strong>
                                     <small>{{ folder.groupLabel && folder.groupLabel !== folder.label ? `${folder.groupLabel} · ` : '' }}{{ folder.file_count || 0 }} file</small>
                                 </button>
                             </div>
+                            <p v-else class="muted-card inline-empty">Belum ada folder pada level ini.</p>
                         </section>
 
                         <section class="explorer-section">
                             <div class="section-heading compact-heading">
                                 <div><h2>File</h2><p>{{ visibleFiles.length }} file dalam folder ini.</p></div>
                                 <div class="page-actions">
-                                    <button type="button" class="secondary-btn" :disabled="visibleFiles.length === 0" @click="selectAllVisibleFiles">Pilih semua</button>
+                                    <button type="button" class="secondary-btn" :disabled="archiveLoading || visibleFiles.length === 0" @click="selectAllVisibleFiles">Pilih semua</button>
                                     <button type="button" class="ghost-btn" :disabled="selectedFileIds.length === 0" @click="selectedFileIds = []">Kosongkan</button>
                                 </div>
                             </div>
                             <div v-if="visibleFiles.length" class="file-grid">
                                 <article v-for="file in visibleFiles" :key="file.file_id" :class="['file-card', selectedFileIds.includes(file.file_id) ? 'selected-row' : '']">
-                                    <label class="check file-select"><input v-model="selectedFileIds" type="checkbox" :value="file.file_id" /> Pilih</label>
+                                    <label class="check file-select"><input v-model="selectedFileIds" type="checkbox" :value="file.file_id" :aria-label="`Pilih ${file.display_filename}`" /> Pilih</label>
                                     <div class="file-icon">{{ fileIcon(file.extension) }}</div>
                                     <strong>{{ file.display_filename }}</strong>
                                     <small>.{{ file.extension || '-' }} · {{ bytes(file.file_size_bytes) }}</small>
@@ -109,7 +111,7 @@
                                     <div class="action-cell">
                                         <button type="button" class="secondary-btn" :disabled="file.deleted_at || file.status === 'deleted'" @click="preview(file)">Preview</button>
                                         <button type="button" class="secondary-btn" :disabled="file.deleted_at || file.status === 'deleted'" @click="download(file)">Download</button>
-                                        <button v-if="file.deleted_at || file.status === 'deleted'" type="button" class="ghost-btn" @click="restore(file)">Restore</button>
+                                        <button v-if="file.deleted_at || file.status === 'deleted'" type="button" class="ghost-btn" :disabled="actionLoading" @click="restore(file)">{{ actionLoading ? 'Memproses...' : 'Restore' }}</button>
                                     </div>
                                 </article>
                             </div>
@@ -157,6 +159,7 @@ const peopleLoading = ref(false);
 const archiveLoading = ref(false);
 const jobLoading = ref(false);
 const exportLoading = ref(false);
+const actionLoading = ref(false);
 const peopleError = ref('');
 const archiveError = ref('');
 const jobError = ref('');
@@ -408,9 +411,16 @@ async function restore(file) {
     });
     if (!confirmed) return;
 
-    await arsipApi.restoreFile(file.file_id);
-    app.notify('success', 'File berhasil direstore.');
-    await loadArchive();
+    actionLoading.value = true;
+    try {
+        await arsipApi.restoreFile(file.file_id);
+        app.notify('success', 'File berhasil direstore.');
+        await loadArchive();
+    } catch (err) {
+        app.notify('error', toErrorMessage(err));
+    } finally {
+        actionLoading.value = false;
+    }
 }
 
 function fileIcon(extension) {

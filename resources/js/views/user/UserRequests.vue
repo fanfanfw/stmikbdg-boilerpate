@@ -35,11 +35,11 @@
                 <div class="two-column">
                     <form class="stack-form" @submit.prevent="uploadForRequest(selectedRequest)">
                         <label>Upload file baru<input type="file" required @change="setRequestFile($event, selectedRequest.request_id)" /></label>
-                        <button type="submit" :disabled="!requestFiles[selectedRequest.request_id]">Upload untuk request</button>
+                        <button type="submit" :disabled="actionLoading || !requestFiles[selectedRequest.request_id]">{{ actionLoading ? 'Mengupload...' : 'Upload untuk request' }}</button>
                     </form>
                     <form class="stack-form" @submit.prevent="reuseFile(selectedRequest)">
                         <label>Pakai file lama<select v-model="reuseFiles[selectedRequest.request_id]"><option value="">Pilih file personal</option><option v-for="file in reusableFiles" :key="file.file_id" :value="file.file_id">{{ file.display_filename }}</option></select></label>
-                        <button type="submit" class="secondary-btn" :disabled="!reuseFiles[selectedRequest.request_id]">Reuse file</button>
+                        <button type="submit" class="secondary-btn" :disabled="actionLoading || !reuseFiles[selectedRequest.request_id]">{{ actionLoading ? 'Memproses...' : 'Reuse file' }}</button>
                     </form>
                 </div>
                 <section class="explorer-section">
@@ -73,6 +73,7 @@ import { bytes, dateTime } from '../../utils/format';
 
 const app = useAppStore();
 const loading = ref(false);
+const actionLoading = ref(false);
 const error = ref('');
 const requests = ref([]);
 const files = ref([]);
@@ -107,19 +108,35 @@ async function uploadForRequest(request) {
     if (!activeAssignment || !requestFiles[request.request_id]) return;
     const formData = new FormData();
     formData.append('file', requestFiles[request.request_id]);
-    await arsipApi.uploadAssignmentFile(activeAssignment.assignment_id, formData);
-    app.notify('success', 'File request berhasil diupload.');
-    requestFiles[request.request_id] = null;
-    await Promise.all([load(), app.loadSummary()]);
+
+    actionLoading.value = true;
+    try {
+        await arsipApi.uploadAssignmentFile(activeAssignment.assignment_id, formData);
+        app.notify('success', 'File request berhasil diupload.');
+        requestFiles[request.request_id] = null;
+        await Promise.all([load(), app.loadSummary()]);
+    } catch (err) {
+        app.notify('error', toErrorMessage(err));
+    } finally {
+        actionLoading.value = false;
+    }
 }
 
 async function reuseFile(request) {
     const activeAssignment = assignment(request);
     if (!activeAssignment || !reuseFiles[request.request_id]) return;
-    await arsipApi.reuseAssignmentFile(activeAssignment.assignment_id, reuseFiles[request.request_id]);
-    app.notify('success', 'File lama dipakai untuk request.');
-    reuseFiles[request.request_id] = '';
-    await Promise.all([load(), app.loadSummary()]);
+
+    actionLoading.value = true;
+    try {
+        await arsipApi.reuseAssignmentFile(activeAssignment.assignment_id, reuseFiles[request.request_id]);
+        app.notify('success', 'File lama dipakai untuk request.');
+        reuseFiles[request.request_id] = '';
+        await Promise.all([load(), app.loadSummary()]);
+    } catch (err) {
+        app.notify('error', toErrorMessage(err));
+    } finally {
+        actionLoading.value = false;
+    }
 }
 
 function fileIcon(extension) {

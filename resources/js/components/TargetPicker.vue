@@ -41,7 +41,7 @@
                     <option value="0">Belum punya akun</option>
                 </select>
             </label>
-            <button type="submit">Terapkan filter</button>
+            <button type="submit" :disabled="targetLoading">{{ targetLoading ? 'Mencari...' : 'Terapkan filter' }}</button>
         </form>
 
         <div class="target-summary-strip">
@@ -51,7 +51,7 @@
             </div>
             <div>
                 <span>Data ditemukan</span>
-                <strong>{{ targetMeta.total || 0 }}</strong>
+                <strong>{{ effectiveTargetTotal }}</strong>
             </div>
             <div>
                 <span>Target tersimpan</span>
@@ -62,18 +62,18 @@
         <AsyncState :loading="targetLoading" :error="targetError" :empty="targets.length === 0" empty-title="Belum ada target" empty-text="Ubah filter untuk mencari mahasiswa atau dosen." @retry="loadTargets(filters.page)">
             <div class="bulk-actions">
                 <strong>{{ mode === 'filter' ? 'Filter ini akan disimpan sebagai target' : `${selectedIdentifiers.length} target dipilih` }}</strong>
-                <button type="button" class="secondary-btn" :disabled="selectingAllFiltered || targetMeta.total === 0" @click="selectFilteredTargets">
-                    {{ selectingAllFiltered ? 'Memilih target...' : `Pilih semua hasil filter (${targetMeta.total || 0})` }}
+                <button type="button" class="secondary-btn" :disabled="targetLoading || selectingAllFiltered || effectiveTargetTotal === 0" @click="selectFilteredTargets">
+                    {{ selectingAllFiltered ? 'Memilih target...' : `Pilih semua hasil filter (${effectiveTargetTotal})` }}
                 </button>
-                <button type="button" class="secondary-btn" @click="selectPageTargets">Pilih halaman ini</button>
-                <button type="button" class="ghost-btn" @click="clearTargets">Kosongkan pilihan</button>
+                <button type="button" class="secondary-btn" :disabled="targetLoading || pageSelectableIdentifiers.length === 0" @click="selectPageTargets">Pilih halaman ini</button>
+                <button type="button" class="ghost-btn" :disabled="targetLoading || selectedIdentifiers.length === 0" @click="clearTargets">Kosongkan pilihan</button>
             </div>
 
             <div class="table-wrap target-table-wrap">
                 <table>
                     <thead>
                         <tr>
-                            <th><input type="checkbox" :checked="allPageSelected" :disabled="pageSelectableIdentifiers.length === 0" @change="togglePageTargets($event)" /></th>
+                            <th><input type="checkbox" :checked="allPageSelected" :disabled="targetLoading || pageSelectableIdentifiers.length === 0" aria-label="Pilih semua target di halaman ini" @change="togglePageTargets($event)" /></th>
                             <th>Identifier</th>
                             <th>Nama</th>
                             <th v-if="role === 'mahasiswa'">Angkatan</th>
@@ -83,7 +83,7 @@
                     </thead>
                     <tbody>
                         <tr v-for="target in targets" :key="target.identifier" :class="selectedIdentifiers.includes(target.identifier) ? 'selected-row' : ''">
-                            <td><input type="checkbox" :value="target.identifier" :disabled="!target.has_account" v-model="selectedIdentifiers" @change="setMode('specific')" /></td>
+                            <td><input type="checkbox" :value="target.identifier" :disabled="targetLoading || !target.has_account" :aria-label="`Pilih target ${target.identifier}`" v-model="selectedIdentifiers" @change="setMode('specific')" /></td>
                             <td><strong>{{ target.identifier }}</strong></td>
                             <td>{{ target.name || '-' }}</td>
                             <td v-if="role === 'mahasiswa'">{{ target.angkatan || '-' }}</td>
@@ -95,9 +95,9 @@
             </div>
 
             <div class="pagination-row">
-                <button type="button" class="secondary-btn" :disabled="targetMeta.current_page <= 1" @click="changeTargetPage(targetMeta.current_page - 1)">Sebelumnya</button>
-                <span>Halaman {{ targetMeta.current_page || 1 }} dari {{ targetMeta.last_page || 1 }} · {{ targetMeta.total || 0 }} data</span>
-                <button type="button" class="secondary-btn" :disabled="targetMeta.current_page >= targetMeta.last_page" @click="changeTargetPage(targetMeta.current_page + 1)">Berikutnya</button>
+                <button type="button" class="secondary-btn" :disabled="targetLoading || targetMeta.current_page <= 1" @click="changeTargetPage(targetMeta.current_page - 1)">Sebelumnya</button>
+                <span>Halaman {{ targetMeta.current_page || 1 }} dari {{ targetMeta.last_page || 1 }} · {{ effectiveTargetTotal }} data</span>
+                <button type="button" class="secondary-btn" :disabled="targetLoading || targetMeta.current_page >= targetMeta.last_page" @click="changeTargetPage(targetMeta.current_page + 1)">Berikutnya</button>
             </div>
         </AsyncState>
     </section>
@@ -124,6 +124,7 @@ const targetLoading = ref(false);
 const selectingAllFiltered = ref(false);
 const targetError = ref('');
 const targetMeta = ref({ current_page: 1, last_page: 1, per_page: 25, total: 0 });
+const loadedTargetQueryKey = ref('');
 const filters = reactive({ search: '', angkatan: '', status: 'A', has_account: '1', page: 1 });
 
 const filterSummary = computed(() => {
@@ -147,7 +148,9 @@ const payload = computed(() => ({
 const pageSelectableIdentifiers = computed(() => targets.value.filter((target) => target.has_account).map((target) => target.identifier));
 const allPageSelected = computed(() => pageSelectableIdentifiers.value.length > 0
     && pageSelectableIdentifiers.value.every((identifier) => selectedIdentifiers.value.includes(identifier)));
-const canSubmit = computed(() => mode.value === 'filter' ? filters.has_account !== '0' : selectedIdentifiers.value.length > 0);
+const isCurrentFilterLoaded = computed(() => loadedTargetQueryKey.value === targetQueryKey());
+const effectiveTargetTotal = computed(() => (isCurrentFilterLoaded.value ? targetMeta.value.total || 0 : 0));
+const canSubmit = computed(() => mode.value === 'filter' ? filters.has_account !== '0' && effectiveTargetTotal.value > 0 : selectedIdentifiers.value.length > 0);
 
 function csv(value) {
     return String(value || '')
@@ -180,6 +183,24 @@ function targetQuery(page = filters.page, perPage = 25) {
     };
 }
 
+function targetQueryKey(page = filters.page) {
+    const query = targetQuery(page);
+    return JSON.stringify({
+        role: query.role,
+        search: query.search,
+        angkatan: query.angkatan,
+        status: query.status,
+        has_account: query.has_account,
+        page: query.page,
+    });
+}
+
+function resetLoadedTargets() {
+    loadedTargetQueryKey.value = '';
+    targetMeta.value = { current_page: 1, last_page: 1, per_page: 25, total: 0 };
+    targets.value = [];
+}
+
 function notifyChange() {
     emit('change', {
         payload: payload.value,
@@ -197,7 +218,7 @@ function setRole(nextRole) {
     selectedIdentifiers.value = [];
     filters.angkatan = '';
     filters.page = 1;
-    targetMeta.value = { current_page: 1, last_page: 1, per_page: 25, total: 0 };
+    resetLoadedTargets();
     loadTargets(1);
 }
 
@@ -209,14 +230,22 @@ async function loadTargets(page = 1) {
     targetLoading.value = true;
     targetError.value = '';
     filters.page = page;
+    const query = targetQuery(page);
+    const queryKey = targetQueryKey(page);
     try {
-        const data = await arsipApi.adminTargets(targetQuery(page));
+        const data = await arsipApi.adminTargets(query);
+        if (queryKey !== targetQueryKey(page)) return;
         targets.value = data.targets || [];
         targetMeta.value = data.meta || { current_page: 1, last_page: 1, per_page: 25, total: 0 };
+        loadedTargetQueryKey.value = queryKey;
     } catch (err) {
+        loadedTargetQueryKey.value = '';
+        targetMeta.value = { current_page: page, last_page: 1, per_page: 25, total: 0 };
+        targets.value = [];
         targetError.value = toErrorMessage(err);
     } finally {
         targetLoading.value = false;
+        notifyChange();
     }
 }
 
@@ -243,7 +272,7 @@ function togglePageTargets(event) {
 }
 
 async function selectFilteredTargets() {
-    if (targetMeta.value.total === 0) return;
+    if (effectiveTargetTotal.value === 0) return;
 
     mode.value = 'specific';
     selectingAllFiltered.value = true;
@@ -277,6 +306,11 @@ function changeTargetPage(page) {
     loadTargets(page);
 }
 
-watch([role, mode, selectedIdentifiers, () => filters.angkatan, () => filters.status, () => filters.has_account], notifyChange, { deep: true });
+watch([() => filters.search, () => filters.angkatan, () => filters.status, () => filters.has_account], () => {
+    filters.page = 1;
+    resetLoadedTargets();
+    notifyChange();
+});
+watch([role, mode, selectedIdentifiers], notifyChange, { deep: true });
 onMounted(() => { loadTargets(); notifyChange(); });
 </script>

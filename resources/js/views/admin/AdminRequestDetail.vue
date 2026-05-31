@@ -4,7 +4,7 @@
         <PageHeader eyebrow="Detail request" :title="requestData?.title || 'Memuat request'" :description="requestData?.description || 'Kelola status, target, dan file yang terkumpul untuk request ini.'">
             <template #actions>
                 <RouterLink class="secondary-btn" :to="{ name: 'admin.requests' }">Kembali</RouterLink>
-                <button v-if="requestData" type="button" class="secondary-btn" @click="loadDetail">Refresh</button>
+                <button v-if="requestData" type="button" class="secondary-btn" :disabled="loading || actionLoading || bulkLoading" @click="loadDetail">Refresh</button>
             </template>
         </PageHeader>
 
@@ -56,8 +56,8 @@
                             <p>{{ appendTargeting?.summary || 'Pilih target tambahan, lalu validasi sebelum menambahkan.' }}</p>
                         </div>
                         <div class="page-actions">
-                            <button type="button" class="secondary-btn" :disabled="appendLoading || appendPreviewLoading || !appendTargeting?.canSubmit" @click="previewAppendTargets">Validasi target</button>
-                            <button type="button" :disabled="appendLoading || appendPreviewLoading || !canAppendTargets" @click="appendTargets">Tambahkan</button>
+                            <button type="button" class="secondary-btn" :disabled="appendLoading || appendPreviewLoading || !appendTargeting?.canSubmit" @click="previewAppendTargets">{{ appendPreviewLoading ? 'Memvalidasi...' : 'Validasi target' }}</button>
+                            <button type="button" :disabled="appendLoading || appendPreviewLoading || !canAppendTargets" @click="appendTargets">{{ appendLoading ? 'Menambahkan...' : 'Tambahkan' }}</button>
                         </div>
                     </div>
 
@@ -104,7 +104,7 @@
             <section v-if="activeTab === 'targets'" class="panel-block">
                 <div class="section-heading">
                     <div><h2>Target</h2><p>Monitoring assignment, verifikasi, upload admin, dan file target request ini.</p></div>
-                    <button type="button" class="secondary-btn" :disabled="loading" @click="loadDetail">Refresh</button>
+                    <button type="button" class="secondary-btn" :disabled="loading || bulkLoading || actionLoading" @click="loadDetail">Refresh</button>
                 </div>
                 <form class="filter-bar request-monitor-filter" @submit.prevent>
                     <select v-model="targetFilters.status"><option value="">Semua status target</option><option v-for="status in assignmentStatuses" :key="status" :value="status">{{ statusLabel(status) }}</option></select>
@@ -115,16 +115,16 @@
                 <div class="bulk-actions request-bulk-actions">
                     <strong>{{ selectedAssignments.length }} target dipilih</strong>
                     <div class="page-actions">
-                        <button type="button" class="secondary-btn" :disabled="bulkLoading || selectedVerifiableAssignmentIds.length === 0" @click="bulkApproveSelected">Bulk approve</button>
-                        <button type="button" class="ghost-btn" :disabled="bulkLoading || selectedVerifiableAssignmentIds.length === 0" @click="bulkRejectSelected">Bulk reject</button>
+                        <button type="button" class="secondary-btn" :disabled="bulkLoading || selectedVerifiableAssignmentIds.length === 0" @click="bulkApproveSelected">{{ bulkLoading ? 'Memproses...' : 'Bulk approve' }}</button>
+                        <button type="button" class="ghost-btn" :disabled="bulkLoading || selectedVerifiableAssignmentIds.length === 0" @click="bulkRejectSelected">{{ bulkLoading ? 'Memproses...' : 'Bulk reject' }}</button>
                     </div>
                 </div>
                 <div v-if="filteredAssignments.length" class="table-wrap">
                     <table>
-                        <thead><tr><th><input type="checkbox" :checked="allFilteredAssignmentsSelected" @change="toggleAllFilteredAssignments($event)" /></th><th>Target</th><th>Status Target</th><th>Verifikasi</th><th>Submitted</th><th>File</th><th>Aksi</th></tr></thead>
+                        <thead><tr><th><input type="checkbox" :checked="allFilteredAssignmentsSelected" :disabled="bulkLoading || filteredAssignments.length === 0" aria-label="Pilih semua target hasil filter" @change="toggleAllFilteredAssignments($event)" /></th><th>Target</th><th>Status Target</th><th>Verifikasi</th><th>Submitted</th><th>File</th><th>Aksi</th></tr></thead>
                         <tbody>
                             <tr v-for="assignment in filteredAssignments" :key="assignment.assignment_id">
-                                <td><input v-model="selectedAssignmentIds" type="checkbox" :value="assignment.assignment_id" /></td>
+                                <td><input v-model="selectedAssignmentIds" type="checkbox" :value="assignment.assignment_id" :disabled="bulkLoading" :aria-label="`Pilih target ${assignment.identifier}`" /></td>
                                 <td><strong>{{ assignment.identifier }}</strong><small>{{ assignment.name_snapshot || '-' }} · {{ assignment.angkatan_snapshot || assignment.prodi_snapshot || '-' }}</small></td>
                                 <td><StatusPill :status="assignment.status" /><small v-if="assignment.is_late">Terlambat</small><small v-if="assignment.reject_reason">Catatan: {{ assignment.reject_reason }}</small></td>
                                 <td><StatusPill :status="verificationStatus(assignment)" /><small>{{ verificationText(assignment) }}</small></td>
@@ -150,27 +150,27 @@
             <section v-if="activeTab === 'files'" class="panel-block">
                 <div class="section-heading">
                     <div><h2>File terkumpul</h2><p>Filter, verifikasi, dan download file current dari semua target request.</p></div>
-                    <button type="button" class="secondary-btn" :disabled="loading" @click="loadDetail">Refresh</button>
+                    <button type="button" class="secondary-btn" :disabled="loading || bulkLoading || actionLoading" @click="loadDetail">Refresh</button>
                 </div>
                 <form class="filter-bar request-monitor-filter" @submit.prevent>
                     <select v-model="fileFilters.status"><option value="all">Semua file</option><option value="waiting_verification">Menunggu verifikasi</option><option value="approved">Disetujui</option><option value="rejected">Ditolak</option><option value="late">Terlambat</option></select>
                     <input v-model="fileFilters.search" placeholder="Cari file/target/nama" />
-                    <button type="button" class="secondary-btn" :disabled="selectedRequestFiles.length === 0" @click="downloadSelectedFiles">Download selected</button>
-                    <button type="button" class="ghost-btn" :disabled="selectedRequestFileIds.length === 0" @click="selectedRequestFileIds = []">Kosongkan pilihan</button>
+                    <button type="button" class="secondary-btn" :disabled="downloadLoading || selectedRequestFiles.length === 0" @click="downloadSelectedFiles">{{ downloadLoading ? 'Mengunduh...' : 'Download selected' }}</button>
+                    <button type="button" class="ghost-btn" :disabled="downloadLoading || selectedRequestFileIds.length === 0" @click="selectedRequestFileIds = []">Kosongkan pilihan</button>
                 </form>
                 <div class="bulk-actions request-bulk-actions">
                     <strong>{{ selectedRequestFiles.length }} file dipilih</strong>
                     <div class="page-actions">
-                        <button type="button" class="secondary-btn" :disabled="bulkLoading || selectedFileAssignmentIds.length === 0" @click="bulkApproveFileAssignments">Bulk approve file</button>
-                        <button type="button" class="ghost-btn" :disabled="bulkLoading || selectedFileAssignmentIds.length === 0" @click="bulkRejectFileAssignments">Bulk reject file</button>
+                        <button type="button" class="secondary-btn" :disabled="bulkLoading || selectedFileAssignmentIds.length === 0" @click="bulkApproveFileAssignments">{{ bulkLoading ? 'Memproses...' : 'Bulk approve file' }}</button>
+                        <button type="button" class="ghost-btn" :disabled="bulkLoading || selectedFileAssignmentIds.length === 0" @click="bulkRejectFileAssignments">{{ bulkLoading ? 'Memproses...' : 'Bulk reject file' }}</button>
                     </div>
                 </div>
                 <div v-if="filteredCollectedFiles.length" class="table-wrap">
                     <table>
-                        <thead><tr><th><input type="checkbox" :checked="allFilteredFilesSelected" @change="toggleAllFilteredFiles($event)" /></th><th>File</th><th>Target</th><th>Status</th><th>Waktu</th><th>Aksi</th></tr></thead>
+                        <thead><tr><th><input type="checkbox" :checked="allFilteredFilesSelected" :disabled="bulkLoading || filteredCollectedFiles.length === 0" aria-label="Pilih semua file hasil filter" @change="toggleAllFilteredFiles($event)" /></th><th>File</th><th>Target</th><th>Status</th><th>Waktu</th><th>Aksi</th></tr></thead>
                         <tbody>
                             <tr v-for="item in filteredCollectedFiles" :key="item.file.request_file_id">
-                                <td><input v-model="selectedRequestFileIds" type="checkbox" :value="item.file.request_file_id" /></td>
+                                <td><input v-model="selectedRequestFileIds" type="checkbox" :value="item.file.request_file_id" :disabled="bulkLoading" :aria-label="`Pilih file ${item.file.file?.display_filename || item.file.file_id}`" /></td>
                                 <td><strong>{{ item.file.file?.display_filename || item.file.file_id }}</strong><small>{{ item.file.submission_type }} · {{ item.file.file?.extension || '-' }} · {{ fileSize(item.file.file?.file_size_bytes) }}</small></td>
                                 <td>{{ item.assignment.identifier }}<small>{{ item.assignment.name_snapshot || '-' }}</small></td>
                                 <td><StatusPill :status="item.file.status" /><small v-if="item.file.is_late">Terlambat</small><small v-if="item.file.reject_reason">Catatan: {{ item.file.reject_reason }}</small></td>
@@ -230,6 +230,7 @@ const appendTargeting = ref(null);
 const appendPreview = ref(null);
 const appendPickerKey = ref(0);
 const bulkLoading = ref(false);
+const downloadLoading = ref(false);
 const adminUploadInput = ref(null);
 const pendingUploadAssignment = ref(null);
 const selectedAssignmentIds = ref([]);
@@ -684,8 +685,17 @@ async function downloadRequestFile(requestFile) {
 }
 
 async function downloadSelectedFiles() {
-    for (const item of selectedRequestFiles.value) {
-        await downloadRequestFile(item.file);
+    if (downloadLoading.value || selectedRequestFiles.value.length === 0) return;
+
+    downloadLoading.value = true;
+    try {
+        for (const item of selectedRequestFiles.value) {
+            await downloadRequestFile(item.file);
+        }
+    } catch (err) {
+        app.notify('error', toErrorMessage(err));
+    } finally {
+        downloadLoading.value = false;
     }
 }
 
