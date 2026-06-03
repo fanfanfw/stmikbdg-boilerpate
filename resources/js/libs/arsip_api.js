@@ -1,0 +1,140 @@
+import {
+    getJson,
+    postJson,
+    putJson,
+    deleteJson,
+    uploadFormData,
+    downloadBlob,
+} from './arsip_http';
+
+// --------------------------------------------------------------------------
+// Arsip Digital API - Ported from services/arsipApi.js using new HTTP helpers
+// --------------------------------------------------------------------------
+
+export const arsipApi = {
+    // Summary & Settings
+    summary: () => getJson('/me/archive-summary'),
+    settings: () => getJson('/admin/settings'),
+    updateSettings: (payload) => putJson('/admin/settings', payload),
+
+    // Categories
+    categories: (params) => getJson('/categories', params),
+    createCategory: (payload) => postJson('/categories', payload),
+    updateCategory: (id, payload) => putJson(`/categories/${id}`, payload),
+    deleteCategory: (id) => deleteJson(`/categories/${id}`),
+    restoreCategory: (id) => postJson(`/categories/${id}/restore`),
+
+    // Files
+    files: (params) => getJson('/files', params),
+    uploadFile: (formData) => uploadFormData('/files', formData),
+    downloadFile: (file) =>
+        downloadBlob(
+            `/files/${file.file_id}/download`,
+            file.display_filename || file.original_filename,
+        ),
+    deleteFile: (id, reason) => deleteJson(`/files/${id}`, { reason }),
+    restoreFile: (id) => postJson(`/files/${id}/restore`),
+    uploadForUser: (formData) => uploadFormData('/admin/files/upload-for-user', formData),
+
+    // Admin Requests
+    adminRequests: (params) => getJson('/admin/requests', params),
+    adminTargets: (params) => getJson('/admin/targets', params),
+    createRequest: (payload) => postJson('/admin/requests', payload),
+    updateRequest: (id, payload) => putJson(`/admin/requests/${id}`, payload),
+    requestDetail: (id) => getJson(`/admin/requests/${id}`),
+    previewRequestTargets: (payload) => postJson('/admin/requests/preview-targets', payload),
+    appendRequestTargets: (id, payload) => postJson(`/admin/requests/${id}/targets`, payload),
+    publishRequest: (id) => postJson(`/admin/requests/${id}/publish`),
+    closeRequest: (id) => postJson(`/admin/requests/${id}/close`),
+    reopenRequest: (id) => postJson(`/admin/requests/${id}/reopen`),
+    archiveRequest: (id) => postJson(`/admin/requests/${id}/archive`),
+    requestAssignments: (id, params) => getJson(`/admin/requests/${id}/assignments`, params),
+    requestProgress: (id) => getJson(`/admin/requests/${id}/progress`),
+    approveAssignment: (id) => postJson(`/admin/request-assignments/${id}/approve`),
+    rejectAssignment: (id, reason) =>
+        postJson(`/admin/request-assignments/${id}/reject`, { reason }),
+    bulkApproveAssignments: (assignmentIds) =>
+        postJson('/admin/request-assignments/bulk-approve', { assignment_ids: assignmentIds }),
+    bulkRejectAssignments: (assignmentIds, reason) =>
+        postJson('/admin/request-assignments/bulk-reject', { assignment_ids: assignmentIds, reason }),
+    downloadRequestFile: (requestFile) =>
+        downloadBlob(
+            `/admin/request-files/${requestFile.request_file_id}/download`,
+            requestFile.file?.display_filename || `request-file-${requestFile.request_file_id}`,
+        ),
+
+    // User Requests
+    userRequests: () => getJson('/requests'),
+    userRequestDetail: (id) => getJson(`/requests/${id}`),
+    uploadAssignmentFile: (assignmentId, formData) =>
+        uploadFormData(`/request-assignments/${assignmentId}/files/upload`, formData),
+    reuseAssignmentFile: (assignmentId, fileId) =>
+        postJson(`/request-assignments/${assignmentId}/files/reuse`, { file_id: fileId }),
+
+    // Scholarship Types
+    scholarshipTypes: () => getJson('/admin/scholarship-types'),
+    createScholarshipType: (payload) => postJson('/admin/scholarship-types', payload),
+    updateScholarshipType: (id, payload) => putJson(`/admin/scholarship-types/${id}`, payload),
+    deleteScholarshipType: (id) => deleteJson(`/admin/scholarship-types/${id}`),
+    studentScholarships: (params) => getJson('/admin/student-scholarships', params),
+    createStudentScholarship: (payload) => postJson('/admin/student-scholarships', payload),
+    importStudentScholarships: (items) =>
+        postJson('/admin/student-scholarships/import', { items }),
+    updateStudentScholarship: (id, payload) => putJson(`/admin/student-scholarships/${id}`, payload),
+
+    // Distributions
+    distributions: (params) => getJson('/admin/distributions', params),
+    createDistribution: (payload) => postJson('/admin/distributions', payload),
+    updateDistribution: (id, payload) => putJson(`/admin/distributions/${id}`, payload),
+    distributionDetail: (id) => getJson(`/admin/distributions/${id}`),
+    previewDistributionTargets: (payload) =>
+        postJson('/admin/distributions/preview-targets', payload),
+    publishDistribution: (id) => postJson(`/admin/distributions/${id}/publish`),
+    distributionRecipients: (id, params) =>
+        getJson(`/admin/distributions/${id}/recipients`, params),
+    uploadRecipientFile: (recipientId, formData) =>
+        uploadFormData(`/admin/distribution-recipients/${recipientId}/file`, formData),
+    distributionBulkUploadJobs: (distributionId, params) =>
+        getJson(`/admin/distributions/${distributionId}/bulk-upload-jobs`, params),
+    createDistributionBulkUploadJob: (distributionId, formData) =>
+        uploadFormData(`/admin/distributions/${distributionId}/bulk-upload-jobs`, formData),
+    distributionBulkUploadJob: (jobId) =>
+        getJson(`/admin/distribution-bulk-upload-jobs/${jobId}`),
+    confirmDistributionBulkUploadJob: (jobId) =>
+        postJson(`/admin/distribution-bulk-upload-jobs/${jobId}/confirm`),
+    cancelDistributionBulkUploadJob: (jobId) =>
+        postJson(`/admin/distribution-bulk-upload-jobs/${jobId}/cancel`),
+
+    // User Distributions
+    userDistributions: () => getJson('/distributions'),
+    downloadDistributionFile: (file) =>
+        downloadBlob(
+            `/distribution-files/${file.file_id}/download`,
+            file.display_filename || file.original_filename,
+        ),
+
+    // Export Jobs
+    exportJobs: (params) => getJson('/admin/export-jobs', params),
+    createExportJob: (payload) => postJson('/admin/export-jobs', payload),
+    exportJob: (id) => getJson(`/admin/export-jobs/${id}`),
+    downloadExportJob: (job) =>
+        downloadBlob(
+            `/admin/export-jobs/${job.export_job_id}/download`,
+            `arsip-digital-export-${job.export_job_id}.zip`,
+        ),
+
+    // Audit Logs
+    auditLogs: (params) => getJson('/admin/audit-logs', params),
+
+    // Admin Archive Users
+    adminArchiveUsers: (params) => getJson('/admin/archive/users', params),
+
+    // Segments (future use)
+    segments: (params) => getJson('/admin/segments', params),
+    createSegment: (payload) => postJson('/admin/segments', payload),
+    updateSegment: (id, payload) => putJson(`/admin/segments/${id}`, payload),
+    deleteSegment: (id) => deleteJson(`/admin/segments/${id}`),
+    segmentMembers: (id, params) => getJson(`/admin/segments/${id}/members`, params),
+    importSegmentMembers: (id, payload) =>
+        postJson(`/admin/segments/${id}/members/import`, payload),
+};

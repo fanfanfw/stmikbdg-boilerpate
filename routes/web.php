@@ -56,3 +56,7 @@ Route::middleware('auth.token')
  *
  * ? contoh penggunaan: middleware(['auth.token', 'auth.mahasiswa'])
  */
+
+Route::middleware('auth.token')->get('/react/{any?}', function () {
+    return view('react-app');
+})->where('any', '.*')->name('react-app');
