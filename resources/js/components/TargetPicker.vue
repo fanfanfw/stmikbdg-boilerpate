@@ -11,19 +11,6 @@
             </div>
         </div>
 
-        <div class="target-mode-grid">
-            <button type="button" :class="['choice-card', mode === 'filter' ? 'active' : '']" @click="setMode('filter')">
-                <span>Semua hasil filter</span>
-                <strong>{{ filterSummary }}</strong>
-                <small>Cocok untuk semua mahasiswa angkatan tertentu atau semua dosen aktif.</small>
-            </button>
-            <button type="button" :class="['choice-card', mode === 'specific' ? 'active' : '']" @click="setMode('specific')">
-                <span>Pilih manual</span>
-                <strong>{{ selectedIdentifiers.length }} dipilih</strong>
-                <small>Cocok ketika admin hanya ingin mengirim ke sebagian penerima.</small>
-            </button>
-        </div>
-
         <form class="target-filter-bar" @submit.prevent="loadTargets(1)">
             <label class="wide-search">Cari target
                 <input v-model="filters.search" :placeholder="role === 'mahasiswa' ? 'Nama atau NIM' : 'Nama atau kode dosen'" />
@@ -32,13 +19,12 @@
                 <input v-model="filters.angkatan" inputmode="numeric" placeholder="Contoh: 2022" />
             </label>
             <label>Status
-                <input v-model="filters.status" placeholder="A" />
-            </label>
-            <label>Akun login
-                <select v-model="filters.has_account">
-                    <option value="1">Punya akun</option>
-                    <option value="">Semua data</option>
-                    <option value="0">Belum punya akun</option>
+                <select v-model="filters.status">
+                    <option value="A">Aktif</option>
+                    <option value="C">Cuti</option>
+                    <option value="TA">Tidak Aktif</option>
+                    <option value="N">Tidak Aktif (N)</option>
+                    <option value="">Semua status</option>
                 </select>
             </label>
             <button type="submit" :disabled="targetLoading">{{ targetLoading ? 'Mencari...' : 'Terapkan filter' }}</button>
@@ -78,7 +64,6 @@
                             <th>Nama</th>
                             <th v-if="role === 'mahasiswa'">Angkatan</th>
                             <th>Status</th>
-                            <th>Akun</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -88,7 +73,6 @@
                             <td>{{ target.name || '-' }}</td>
                             <td v-if="role === 'mahasiswa'">{{ target.angkatan || '-' }}</td>
                             <td>{{ target.status || '-' }}</td>
-                            <td><StatusPill :status="target.has_account ? 'approved' : 'rejected'" /></td>
                         </tr>
                     </tbody>
                 </table>
@@ -106,7 +90,6 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AsyncState from './AsyncState.vue';
-import StatusPill from './StatusPill.vue';
 import { arsipApi } from '../services/arsipApi';
 import { toErrorMessage } from '../services/http';
 
@@ -125,14 +108,12 @@ const selectingAllFiltered = ref(false);
 const targetError = ref('');
 const targetMeta = ref({ current_page: 1, last_page: 1, per_page: 25, total: 0 });
 const loadedTargetQueryKey = ref('');
-const filters = reactive({ search: '', angkatan: '', status: 'A', has_account: '1', page: 1 });
+const filters = reactive({ search: '', angkatan: '', status: 'A', page: 1 });
 
 const filterSummary = computed(() => {
     const parts = [];
     if (role.value === 'mahasiswa' && csv(filters.angkatan).length) parts.push(`angkatan ${csv(filters.angkatan).join(', ')}`);
     if (csv(filters.status).length) parts.push(`status ${csv(filters.status).join(', ')}`);
-    if (filters.has_account === '1') parts.push('punya akun');
-    if (filters.has_account === '0') parts.push('belum punya akun');
     return parts.length ? parts.join(' · ') : `semua ${roleLabel.value}`;
 });
 
@@ -150,7 +131,7 @@ const allPageSelected = computed(() => pageSelectableIdentifiers.value.length > 
     && pageSelectableIdentifiers.value.every((identifier) => selectedIdentifiers.value.includes(identifier)));
 const isCurrentFilterLoaded = computed(() => loadedTargetQueryKey.value === targetQueryKey());
 const effectiveTargetTotal = computed(() => (isCurrentFilterLoaded.value ? targetMeta.value.total || 0 : 0));
-const canSubmit = computed(() => mode.value === 'filter' ? filters.has_account !== '0' && effectiveTargetTotal.value > 0 : selectedIdentifiers.value.length > 0);
+const canSubmit = computed(() => mode.value === 'filter' ? effectiveTargetTotal.value > 0 : selectedIdentifiers.value.length > 0);
 
 function csv(value) {
     return String(value || '')
@@ -166,7 +147,7 @@ function filterPayload() {
 
     if (role.value === 'mahasiswa' && angkatan.length) payload.angkatan = angkatan;
     if (status.length) payload.student_status = status;
-    if (filters.has_account !== '') payload.has_account = filters.has_account === '1';
+    payload.has_account = true;
 
     return payload;
 }
@@ -177,7 +158,7 @@ function targetQuery(page = filters.page, perPage = 25) {
         search: filters.search,
         angkatan: role.value === 'mahasiswa' ? csv(filters.angkatan)[0] || '' : '',
         status: csv(filters.status)[0] || '',
-        has_account: filters.has_account,
+        has_account: '1',
         per_page: perPage,
         page,
     };
@@ -300,13 +281,14 @@ async function selectFilteredTargets() {
 
 function clearTargets() {
     selectedIdentifiers.value = [];
+    mode.value = 'filter';
 }
 
 function changeTargetPage(page) {
     loadTargets(page);
 }
 
-watch([() => filters.search, () => filters.angkatan, () => filters.status, () => filters.has_account], () => {
+watch([() => filters.search, () => filters.angkatan, () => filters.status], () => {
     filters.page = 1;
     resetLoadedTargets();
     notifyChange();
