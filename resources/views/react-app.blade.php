@@ -14,6 +14,7 @@
     <meta name="theme-color" content="#ffffff">
 
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    @viteReactRefresh
     @vite(['resources/css/app-react.css', 'resources/js/app.jsx'])
 </head>
 <body>
