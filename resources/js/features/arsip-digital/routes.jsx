@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import { useUser } from "../../contexts/UserContext";
 
 // User pages
@@ -19,9 +19,12 @@ import AdminExports from "./admin/AdminExports";
 import AdminAudit from "./admin/AdminAudit";
 import AdminSettings from "./admin/AdminSettings";
 
+import NotAllowed from "./common/NotAllowed";
+
 export default function ArsipDigitalRoutes() {
     const { role } = useUser();
-    const isAdmin = role === 'admin' || role === 'developer';
+    const isAdmin = role === 'admin';
+    const isMahasiswa = role === 'mahasiswa';
 
     if (isAdmin) {
         return (
@@ -35,19 +38,27 @@ export default function ArsipDigitalRoutes() {
                 <Route path="/export" element={<AdminExports />} />
                 <Route path="/audit" element={<AdminAudit />} />
                 <Route path="/pengaturan" element={<AdminSettings />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
+                <Route path="*" element={<NotAllowed />} />
+            </Routes>
+        );
+    }
+
+    if (isMahasiswa) {
+        return (
+            <Routes>
+                <Route path="/" element={<UserDashboard />} />
+                <Route path="/arsip-saya" element={<PersonalArchive />} />
+                <Route path="/permintaan" element={<UserRequests />} />
+                <Route path="/permintaan/:id" element={<UserRequestDetail />} />
+                <Route path="/distribusi" element={<UserDistributions />} />
+                <Route path="*" element={<NotAllowed />} />
             </Routes>
         );
     }
 
     return (
         <Routes>
-            <Route path="/" element={<UserDashboard />} />
-            <Route path="/arsip-saya" element={<PersonalArchive />} />
-            <Route path="/permintaan" element={<UserRequests />} />
-            <Route path="/permintaan/:id" element={<UserRequestDetail />} />
-            <Route path="/distribusi" element={<UserDistributions />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotAllowed />} />
         </Routes>
     );
 }

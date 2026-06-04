@@ -21,14 +21,22 @@ Route::controller(AuthController::class)
 Route::middleware('auth.token')
     ->group(function () {
         Route::get('/home', function () {
-            return view('welcome');
+            return redirect('/react');
         })->name('home');
 
         Route::get('/session/me', function () {
             $role = session('role');
+            $activeRole = is_array($role) ? array_key_first(array_filter($role)) : $role;
+            $normalizedRole = match ($activeRole) {
+                'is_admin', 'admin' => 'admin',
+                'is_mhs', 'mahasiswa' => 'mahasiswa',
+                'is_dosen', 'dosen' => 'dosen',
+                'is_dev', 'developer' => 'developer',
+                default => $activeRole,
+            };
 
             return response()->json([
-                'role' => is_array($role) ? array_key_first(array_filter($role)) : $role,
+                'role' => $normalizedRole,
                 'account' => session('account'),
                 'profile' => session('profile'),
                 'user_email' => session('user_email'),
