@@ -8,10 +8,7 @@ import {
     FolderOutlined,
     DescriptionOutlined,
     LocalShippingOutlined,
-    SchoolOutlined,
-    FileDownloadOutlined,
     HistoryOutlined,
-    SettingsOutlined,
     MenuOutlined,
     LogoutOutlined,
     PersonOutlined,
@@ -29,10 +26,7 @@ const adminMenuItems = [
     { label: 'Arsip Pengguna', path: '/arsip-pengguna', icon: FolderOutlined },
     { label: 'Permintaan Berkas', path: '/permintaan', icon: DescriptionOutlined },
     { label: 'Distribusi Berkas', path: '/distribusi', icon: LocalShippingOutlined },
-    { label: 'Beasiswa', path: '/beasiswa', icon: SchoolOutlined },
-    { label: 'Export ZIP', path: '/export', icon: FileDownloadOutlined },
     { label: 'Audit Log', path: '/audit', icon: HistoryOutlined },
-    { label: 'Pengaturan', path: '/pengaturan', icon: SettingsOutlined },
 ];
 
 function Footer() {
