@@ -34,7 +34,6 @@ const emptyForm = {
     title: '',
     description: '',
     deadline_at: '',
-    category_id: '',
     allowed_extensions: 'pdf, jpg, jpeg, png, doc, docx, xls, xlsx',
     max_file_size_mb: '',
     max_files: 1,
@@ -50,12 +49,6 @@ function unwrapList(response) {
         data: Array.isArray(list) ? list : [],
         meta: payload.meta ?? payload.pagination ?? response?.meta ?? null,
     };
-}
-
-function unwrapCategories(response) {
-    const payload = response?.data ?? response ?? {};
-    const list = Array.isArray(payload) ? payload : payload.categories ?? payload.data ?? [];
-    return Array.isArray(list) ? list : [];
 }
 
 function unwrapPreview(response) {
@@ -81,7 +74,6 @@ function normalizeForm(request) {
         title: request.title || '',
         description: request.description || '',
         deadline_at: request.deadline_at ? String(request.deadline_at).slice(0, 16) : '',
-        category_id: request.category_id || '',
         allowed_extensions: Array.isArray(request.allowed_extensions) ? request.allowed_extensions.join(', ') : request.allowed_extensions || '',
         max_file_size_mb: request.max_file_size_mb || '',
         max_files: request.max_files || 1,
@@ -133,7 +125,6 @@ export default function AdminRequests() {
     const [saving, setSaving] = useState(false);
     const [preview, setPreview] = useState(null);
     const [previewLoading, setPreviewLoading] = useState(false);
-    const [categories, setCategories] = useState([]);
 
     const fetchRequests = async () => {
         setLoading(true);
@@ -156,21 +147,8 @@ export default function AdminRequests() {
         }
     };
 
-    const fetchCategories = async () => {
-        try {
-            const response = await arsipApi.categories();
-            setCategories(unwrapCategories(response));
-        } catch {
-            setCategories([]);
-        }
-    };
-
     useEffect(() => {
         fetchRequests();
-    }, []);
-
-    useEffect(() => {
-        fetchCategories();
     }, []);
 
     const handleFilterChange = (key, value) => {
@@ -206,7 +184,6 @@ export default function AdminRequests() {
             close_after_deadline: Boolean(form.close_after_deadline),
             ...targetPayload,
         };
-        if (form.category_id) payload.category_id = Number(form.category_id);
         return payload;
     };
 
@@ -360,12 +337,6 @@ export default function AdminRequests() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <TextField size="small" label="Judul" value={form.title} onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))} required />
                         <TextField size="small" type="datetime-local" label="Deadline" value={form.deadline_at} onChange={(event) => setForm((prev) => ({ ...prev, deadline_at: event.target.value }))} InputLabelProps={{ shrink: true }} />
-                        {categories.length > 0 && (
-                            <TextField size="small" select label="Kategori" value={form.category_id} onChange={(event) => setForm((prev) => ({ ...prev, category_id: event.target.value }))}>
-                                <MenuItem value="">Tanpa kategori</MenuItem>
-                                {categories.map((category) => <MenuItem key={category.category_id || category.id} value={category.category_id || category.id}>{category.name || category.category_name || `Kategori #${category.category_id || category.id}`}</MenuItem>)}
-                            </TextField>
-                        )}
                         <TextField size="small" type="number" label="Maks file" value={form.max_files} onChange={(event) => setForm((prev) => ({ ...prev, max_files: event.target.value }))} />
                         <TextField size="small" type="number" label="Maks ukuran MB" value={form.max_file_size_mb} onChange={(event) => setForm((prev) => ({ ...prev, max_file_size_mb: event.target.value }))} />
                         <TextField size="small" label="Ekstensi diizinkan" value={form.allowed_extensions} onChange={(event) => setForm((prev) => ({ ...prev, allowed_extensions: event.target.value }))} helperText="Pisahkan dengan koma/baris." />

@@ -320,7 +320,6 @@ export default function AdminRequestDetail() {
             formData.append('owner_identifier', uploadAssignment.identifier);
             formData.append('request_assignment_id', assignmentId(uploadAssignment));
             formData.append('display_filename', selectedFile.name);
-            if (request?.category_id) formData.append('category_id', request.category_id);
             if (uploadNote) formData.append('note', uploadNote);
             await arsipApi.uploadForUser(formData);
             customSwal.toast.success({ message: 'File user berhasil diupload admin.' });
