@@ -23,7 +23,7 @@ export default function NotAllowed() {
                 </div>
                 <div className="flex items-center justify-center gap-2 flex-wrap">
                     <Button
-                        href="/react"
+                        href="/home"
                         variant="contained"
                         size="small"
                         startIcon={<HomeOutlined />}

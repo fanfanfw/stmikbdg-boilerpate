@@ -24,7 +24,7 @@ if (csrfToken) {
 
 function App() {
     return (
-        <BrowserRouter basename="/react">
+        <BrowserRouter basename="/home">
             <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="id">
                 <CssBaseline />
                 <UserProvider>

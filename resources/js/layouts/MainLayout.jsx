@@ -195,7 +195,7 @@ function SidebarContent({ menuItems, displayName, displayRole, mobile = false, o
                 <hr className="my-1 opacity-0" />
                 {menuItems.map((item) => {
                     const active = item.path === '/'
-                        ? location.pathname === '/react' || location.pathname === '/react/' || location.pathname === '/'
+                        ? location.pathname === '/home' || location.pathname === '/home/' || location.pathname === '/'
                         : location.pathname.endsWith(item.path);
                     return (
                         <div key={item.path} className="relative overflow-clip w-full">

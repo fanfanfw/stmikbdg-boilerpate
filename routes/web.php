@@ -20,9 +20,9 @@ Route::controller(AuthController::class)
  */
 Route::middleware('auth.token')
     ->group(function () {
-        Route::get('/home', function () {
-            return redirect('/react');
-        })->name('home');
+        Route::get('/home/{any?}', function () {
+            return view('react-app');
+        })->where('any', '.*')->name('home');
 
         Route::get('/session/me', function () {
             $role = session('role');
@@ -66,5 +66,6 @@ Route::middleware('auth.token')
  */
 
 Route::middleware('auth.token')->get('/react/{any?}', function () {
-    return view('react-app');
-})->where('any', '.*')->name('react-app');
+    $path = request()->route('any', '');
+    return redirect('/home' . ($path ? '/' . $path : ''));
+})->where('any', '.*');
