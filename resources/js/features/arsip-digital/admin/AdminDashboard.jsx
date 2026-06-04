@@ -102,10 +102,10 @@ export default function AdminDashboard() {
                     <p className="text-xs text-zinc-500 mt-1">Kelola permintaan dan arsip pengguna dari pintasan utama.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                <Button component={Link} to="/permintaan" variant="contained" sx={{ borderRadius: '0.5rem', textTransform: 'none', backgroundColor: '#2563eb', fontFamily: 'Plus Jakarta Sans, sans-serif' }}>
+                <Button component={Link} to="/home/permintaan" variant="contained" sx={{ borderRadius: '0.5rem', textTransform: 'none', backgroundColor: '#2563eb', fontFamily: 'Plus Jakarta Sans, sans-serif' }}>
                     Kelola Permintaan
                 </Button>
-                <Button component={Link} to="/arsip-pengguna" variant="outlined" sx={{ borderRadius: '0.5rem', textTransform: 'none', borderColor: '#e4e4e7', color: '#3f3f46', fontFamily: 'Plus Jakarta Sans, sans-serif' }}>
+                <Button component={Link} to="/home/arsip-pengguna" variant="outlined" sx={{ borderRadius: '0.5rem', textTransform: 'none', borderColor: '#e4e4e7', color: '#3f3f46', fontFamily: 'Plus Jakarta Sans, sans-serif' }}>
                     Arsip Pengguna
                 </Button>
                 </div>

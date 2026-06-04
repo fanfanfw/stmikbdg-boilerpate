@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { useUser } from "../../contexts/UserContext";
 
 // User pages
@@ -26,12 +26,13 @@ export default function ArsipDigitalRoutes() {
     if (isAdmin) {
         return (
             <Routes>
-                <Route path="/" element={<AdminDashboard />} />
-                <Route path="/arsip-pengguna" element={<AdminArchive />} />
-                <Route path="/permintaan" element={<AdminRequests />} />
-                <Route path="/permintaan/:id" element={<AdminRequestDetail />} />
-                <Route path="/distribusi" element={<AdminDistributions />} />
-                <Route path="/audit" element={<AdminAudit />} />
+                <Route path="/" element={<Navigate to="/home" replace />} />
+                <Route path="/home" element={<AdminDashboard />} />
+                <Route path="/home/arsip-pengguna" element={<AdminArchive />} />
+                <Route path="/home/permintaan" element={<AdminRequests />} />
+                <Route path="/home/permintaan/:id" element={<AdminRequestDetail />} />
+                <Route path="/home/distribusi" element={<AdminDistributions />} />
+                <Route path="/home/audit" element={<AdminAudit />} />
                 <Route path="*" element={<NotAllowed />} />
             </Routes>
         );
@@ -40,11 +41,12 @@ export default function ArsipDigitalRoutes() {
     if (isMahasiswa) {
         return (
             <Routes>
-                <Route path="/" element={<UserDashboard />} />
-                <Route path="/arsip-saya" element={<PersonalArchive />} />
-                <Route path="/permintaan" element={<UserRequests />} />
-                <Route path="/permintaan/:id" element={<UserRequestDetail />} />
-                <Route path="/distribusi" element={<UserDistributions />} />
+                <Route path="/" element={<Navigate to="/home" replace />} />
+                <Route path="/home" element={<UserDashboard />} />
+                <Route path="/home/arsip-saya" element={<PersonalArchive />} />
+                <Route path="/home/permintaan" element={<UserRequests />} />
+                <Route path="/home/permintaan/:id" element={<UserRequestDetail />} />
+                <Route path="/home/distribusi" element={<UserDistributions />} />
                 <Route path="*" element={<NotAllowed />} />
             </Routes>
         );

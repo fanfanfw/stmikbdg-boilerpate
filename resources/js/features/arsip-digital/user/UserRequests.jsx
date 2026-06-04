@@ -107,7 +107,7 @@ export default function UserRequests() {
             renderCell: (params) => (
                 <span
                     className="text-blue-600 hover:text-blue-800 cursor-pointer font-medium hover:underline"
-                    onClick={() => navigate(`/permintaan/${params.row.request_id}`)}
+                    onClick={() => navigate(`/home/permintaan/${params.row.request_id}`)}
                 >
                     {params.value}
                 </span>
@@ -180,7 +180,7 @@ export default function UserRequests() {
                 <Button
                     size="small"
                     variant="outlined"
-                    onClick={() => navigate(`/permintaan/${params.row.request_id}`)}
+                    onClick={() => navigate(`/home/permintaan/${params.row.request_id}`)}
                     sx={{
                         minWidth: 'unset',
                         padding: '4px 8px',
@@ -323,7 +323,7 @@ export default function UserRequests() {
                         paginationModel={{ page: filters.page, pageSize: filters.per_page }}
                         onPaginationModelChange={handlePaginationChange}
                         pageSizeOptions={[10, 25, 50]}
-                        onRowClick={(params) => navigate(`/permintaan/${params.row.request_id}`)}
+                        onRowClick={(params) => navigate(`/home/permintaan/${params.row.request_id}`)}
                         autoHeight
                         disableRowSelectionOnClick
                         sx={{

@@ -251,7 +251,7 @@ export default function UserRequestDetail() {
                     <Button
                         variant="outlined"
                         startIcon={<ArrowBackOutlined />}
-                        onClick={() => navigate('/permintaan')}
+                        onClick={() => navigate('/home/permintaan')}
                         sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}
                     >
                         Kembali

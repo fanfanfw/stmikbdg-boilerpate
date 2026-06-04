@@ -64,7 +64,7 @@ export default function UserDashboard() {
             value: summary?.total_files ?? '-',
             description: 'Total file tersimpan',
             icon: FolderOutlined,
-            path: '/arsip-saya',
+            path: '/home/arsip-saya',
             color: 'text-blue-600 bg-blue-50 border-blue-100',
         },
         {
@@ -72,7 +72,7 @@ export default function UserDashboard() {
             value: requestCount,
             description: 'Permintaan aktif',
             icon: DescriptionOutlined,
-            path: '/permintaan',
+            path: '/home/permintaan',
             color: 'text-amber-600 bg-amber-50 border-amber-100',
         },
         {
@@ -80,7 +80,7 @@ export default function UserDashboard() {
             value: distributionCount,
             description: 'Berkas tersedia',
             icon: LocalShippingOutlined,
-            path: '/distribusi',
+            path: '/home/distribusi',
             color: 'text-emerald-600 bg-emerald-50 border-emerald-100',
         },
     ];
@@ -129,7 +129,7 @@ export default function UserDashboard() {
                         <Button
                             variant="contained"
                             size="small"
-                            onClick={() => navigate('/arsip-saya')}
+                            onClick={() => navigate('/home/arsip-saya')}
                             sx={{ textTransform: 'none', fontFamily: 'Plus Jakarta Sans, sans-serif', borderRadius: '0.5rem' }}
                         >
                             Buka Arsip Saya
@@ -137,7 +137,7 @@ export default function UserDashboard() {
                         <Button
                             variant="outlined"
                             size="small"
-                            onClick={() => navigate('/permintaan')}
+                            onClick={() => navigate('/home/permintaan')}
                             sx={{ textTransform: 'none', fontFamily: 'Plus Jakarta Sans, sans-serif', borderRadius: '0.5rem' }}
                         >
                             Lihat Permintaan

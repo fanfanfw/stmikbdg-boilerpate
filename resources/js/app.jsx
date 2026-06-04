@@ -24,7 +24,7 @@ if (csrfToken) {
 
 function App() {
     return (
-        <BrowserRouter basename="/home">
+        <BrowserRouter>
             <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="id">
                 <CssBaseline />
                 <UserProvider>

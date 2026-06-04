@@ -15,18 +15,18 @@ import {
 } from "@mui/icons-material";
 
 const userMenuItems = [
-    { label: 'Dashboard', path: '/', icon: DashboardOutlined },
-    { label: 'Arsip Saya', path: '/arsip-saya', icon: FolderOutlined },
-    { label: 'Permintaan Berkas', path: '/permintaan', icon: DescriptionOutlined },
-    { label: 'Berkas Kampus', path: '/distribusi', icon: LocalShippingOutlined },
+    { label: 'Dashboard', path: '/home', icon: DashboardOutlined },
+    { label: 'Arsip Saya', path: '/home/arsip-saya', icon: FolderOutlined },
+    { label: 'Permintaan Berkas', path: '/home/permintaan', icon: DescriptionOutlined },
+    { label: 'Berkas Kampus', path: '/home/distribusi', icon: LocalShippingOutlined },
 ];
 
 const adminMenuItems = [
-    { label: 'Dashboard', path: '/', icon: DashboardOutlined },
-    { label: 'Arsip Pengguna', path: '/arsip-pengguna', icon: FolderOutlined },
-    { label: 'Permintaan Berkas', path: '/permintaan', icon: DescriptionOutlined },
-    { label: 'Distribusi Berkas', path: '/distribusi', icon: LocalShippingOutlined },
-    { label: 'Audit Log', path: '/audit', icon: HistoryOutlined },
+    { label: 'Dashboard', path: '/home', icon: DashboardOutlined },
+    { label: 'Arsip Pengguna', path: '/home/arsip-pengguna', icon: FolderOutlined },
+    { label: 'Permintaan Berkas', path: '/home/permintaan', icon: DescriptionOutlined },
+    { label: 'Distribusi Berkas', path: '/home/distribusi', icon: LocalShippingOutlined },
+    { label: 'Audit Log', path: '/home/audit', icon: HistoryOutlined },
 ];
 
 function Footer() {
@@ -188,16 +188,16 @@ function SidebarContent({ menuItems, displayName, displayRole, mobile = false, o
                 </p>
                 <hr className="my-1 opacity-0" />
                 {menuItems.map((item) => {
-                    const active = item.path === '/'
+                    const active = item.path === '/home'
                         ? location.pathname === '/home' || location.pathname === '/home/' || location.pathname === '/'
-                        : location.pathname.endsWith(item.path);
+                        : location.pathname === item.path;
                     return (
                         <div key={item.path} className="relative overflow-clip w-full">
                             <div className={`absolute top-0 left-0 w-2 h-full rounded-md bg-blue-500 ${active ? 'opacity-100' : 'opacity-0'}`} />
                             <div className="px-5">
                                 <NavLink
                                     to={item.path}
-                                    end={item.path === '/'}
+                                    end={item.path === '/home'}
                                     className={`p-2 w-full rounded-md flex items-center gap-3 transition-colors duration-100 ${
                                         active
                                             ? 'border bg-white border-zinc-300 text-zinc-800 font-medium'

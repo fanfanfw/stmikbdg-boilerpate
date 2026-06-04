@@ -21,19 +21,19 @@ function unwrapList(response, keys) {
 }
 
 function userId(user) {
-    return user.user_id ?? user.id ?? user.identifier ?? user.nim ?? user.kd_dosen;
+    return user?.user_id ?? user?.id ?? user?.identifier ?? user?.nim ?? user?.kd_dosen;
 }
 
 function identifierOf(user) {
-    return user.identifier ?? user.nim ?? user.kd_dosen ?? user.username ?? user.user_identifier;
+    return user?.identifier ?? user?.nim ?? user?.kd_dosen ?? user?.username ?? user?.user_identifier;
 }
 
 function nameOf(user) {
-    return user.name ?? user.nama ?? user.full_name ?? user.name_snapshot ?? '-';
+    return user?.name ?? user?.nama ?? user?.full_name ?? user?.name_snapshot ?? '-';
 }
 
 function fileId(file) {
-    return file.file_id ?? file.id;
+    return file?.file_id ?? file?.id;
 }
 
 export default function AdminArchive() {

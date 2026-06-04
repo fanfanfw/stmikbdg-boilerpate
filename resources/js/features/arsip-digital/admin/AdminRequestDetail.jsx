@@ -415,7 +415,7 @@ export default function AdminRequestDetail() {
                 breadcrumbs={[{ label: 'Permintaan Berkas', href: '/permintaan' }, { label: request?.title || 'Detail' }]}
                 actions={
                     <>
-                        <Button variant="outlined" startIcon={<ArrowBackOutlined />} onClick={() => navigate('/permintaan')} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Kembali</Button>
+                        <Button variant="outlined" startIcon={<ArrowBackOutlined />} onClick={() => navigate('/home/permintaan')} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Kembali</Button>
                         <Button variant="outlined" startIcon={<RefreshOutlined />} onClick={refreshAll} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Refresh</Button>
                     </>
                 }

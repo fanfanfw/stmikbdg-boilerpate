@@ -1,23 +1,17 @@
 import { DataGrid, GridToolbarColumnsButton, GridToolbarContainer, GridToolbarDensitySelector, GridToolbarQuickFilter } from '@mui/x-data-grid';
 import { Box, styled } from '@mui/material';
 
-const StyledGridOverlay = styled('div')(({ theme }) => ({
+const StyledGridOverlay = styled('div')(() => ({
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     height: '100%',
     '& .no-rows-primary': {
-        fill: '#3D4751',
-        ...theme.applyStyles('light', {
-            fill: '#AEB8C2',
-        }),
+        fill: '#AEB8C2',
     },
     '& .no-rows-secondary': {
-        fill: '#1D2126',
-        ...theme.applyStyles('light', {
-            fill: '#E8EAED',
-        }),
+        fill: '#E8EAED',
     },
 }));
 

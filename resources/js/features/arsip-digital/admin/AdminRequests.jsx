@@ -281,7 +281,7 @@ export default function AdminRequests() {
     };
 
     const columns = [
-        { field: 'title', headerName: 'Judul', flex: 1, minWidth: 220, renderCell: (params) => <button type="button" className="text-blue-600 font-semibold hover:underline text-left" onClick={() => navigate(`/permintaan/${requestId(params.row)}`)}>{params.row.title || '-'}</button> },
+        { field: 'title', headerName: 'Judul', flex: 1, minWidth: 220, renderCell: (params) => <button type="button" className="text-blue-600 font-semibold hover:underline text-left" onClick={() => navigate(`/home/permintaan/${requestId(params.row)}`)}>{params.row.title || '-'}</button> },
         { field: 'status', headerName: 'Status', width: 130, renderCell: (params) => <StatusChip status={params.row.status} /> },
         { field: 'target_role', headerName: 'Target Role', width: 130, valueGetter: (value, row) => row.target_role || '-' },
         { field: 'deadline_at', headerName: 'Deadline', width: 170, renderCell: (params) => dateTime(params.row.deadline_at) },
@@ -297,7 +297,7 @@ export default function AdminRequests() {
                 const request = params.row;
                 return (
                     <div className="flex gap-1 flex-wrap">
-                        <Button size="small" variant="outlined" component={Link} to={`/permintaan/${requestId(request)}`} sx={{ ...buttonSx, minWidth: 0, borderColor: '#e4e4e7', color: '#3f3f46' }}><VisibilityOutlined sx={{ fontSize: 17 }} /></Button>
+                        <Button size="small" variant="outlined" component={Link} to={`/home/permintaan/${requestId(request)}`} sx={{ ...buttonSx, minWidth: 0, borderColor: '#e4e4e7', color: '#3f3f46' }}><VisibilityOutlined sx={{ fontSize: 17 }} /></Button>
                         {request.status === 'draft' && <Button size="small" onClick={() => openEdit(request)} sx={buttonSx}>Edit</Button>}
                         {request.status === 'draft' && <Button size="small" onClick={() => runLifecycle(request, arsipApi.publishRequest, 'Publish request?', 'Assignment akan dibuat untuk target request ini.', 'Request berhasil dipublish.')} sx={buttonSx}>Publish</Button>}
                         {request.status === 'published' && <Button size="small" onClick={() => runLifecycle(request, arsipApi.closeRequest, 'Tutup request?', 'Penerima tidak bisa upload file baru.', 'Request berhasil ditutup.')} sx={buttonSx}>Tutup</Button>}
