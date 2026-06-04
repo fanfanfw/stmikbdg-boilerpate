@@ -72,14 +72,18 @@ export default function MainLayout({ children }) {
 
     const isAdmin = role === 'admin';
     const isMahasiswa = role === 'mahasiswa';
-    const menuItems = isAdmin ? adminMenuItems : isMahasiswa ? userMenuItems : [];
+    const isDosen = role === 'dosen';
+    const isUser = isMahasiswa || isDosen;
+    const menuItems = isAdmin ? adminMenuItems : isUser ? userMenuItems : [];
 
     const displayName = userdata?.profile?.nama || userdata?.account?.name || userdata?.user_email || 'Memuat pengguna';
     const displayRole = isAdmin
         ? 'Admin'
         : isMahasiswa
             ? 'Mahasiswa'
-            : role || '-';
+            : isDosen
+                ? 'Dosen'
+                : role || '-';
 
     useEffect(() => {
         setShowSidebar(false);

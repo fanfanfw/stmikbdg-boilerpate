@@ -18,7 +18,7 @@ export default function NotAllowed() {
                         Halaman ini tidak bisa diakses
                     </p>
                     <p className="text-xs sm:text-sm text-zinc-500 max-w-md mx-auto">
-                        Arsip Digital saat ini hanya tersedia untuk role Admin dan Mahasiswa. Role aktif Anda: {role || '-'}.
+                        Arsip Digital saat ini hanya tersedia untuk role Admin, Mahasiswa, dan Dosen. Role aktif Anda: {role || '-'}.
                     </p>
                 </div>
                 <div className="flex items-center justify-center gap-2 flex-wrap">

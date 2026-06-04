@@ -267,7 +267,6 @@ export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa
             </div>
 
             {state.error && <Alert severity="error" sx={{ mb: 2, borderRadius: '0.5rem' }}>{String(state.error)}</Alert>}
-            {!hasTargetMeta && state.targets.length > 0 && <Alert severity="info" sx={{ mb: 2, borderRadius: '0.5rem' }}>Backend pagination target belum tersedia. Pilih semua hanya memilih hasil filter yang sudah dimuat.</Alert>}
             {!canSelectAllFiltered && <p className="text-xs text-amber-600 mb-2">Terapkan filter sebelum pilih semua hasil.</p>}
 
             <div className="flex items-center justify-between gap-3 flex-wrap mb-3">

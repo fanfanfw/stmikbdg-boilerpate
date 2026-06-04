@@ -21,7 +21,7 @@ import NotAllowed from "./common/NotAllowed";
 export default function ArsipDigitalRoutes() {
     const { role } = useUser();
     const isAdmin = role === 'admin';
-    const isMahasiswa = role === 'mahasiswa';
+    const isUser = role === 'mahasiswa' || role === 'dosen';
 
     if (isAdmin) {
         return (
@@ -38,7 +38,7 @@ export default function ArsipDigitalRoutes() {
         );
     }
 
-    if (isMahasiswa) {
+    if (isUser) {
         return (
             <Routes>
                 <Route path="/" element={<Navigate to="/home" replace />} />

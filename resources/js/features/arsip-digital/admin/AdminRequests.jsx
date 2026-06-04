@@ -342,7 +342,6 @@ export default function AdminRequests() {
                 <Button variant="outlined" startIcon={<RefreshOutlined />} onClick={fetchRequests} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Refresh</Button>
             </div>
 
-            {!meta && <Alert severity="info" sx={{ mb: 2, borderRadius: '0.5rem' }}>Backend pagination belum tersedia. Data difilter backend lalu dipaginasi di browser.</Alert>}
 
             <div className="bg-white rounded-lg border border-zinc-200">
                 <CustomDataTable

@@ -488,7 +488,6 @@ export default function AdminRequestDetail() {
                     <Button variant="outlined" onClick={loadAssignments} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Terapkan</Button>
                 </div>
 
-                {!assignmentsMeta && <Alert severity="info" sx={{ mb: 2, borderRadius: '0.5rem' }}>Backend pagination assignment belum tersedia. Data difilter backend lalu dipaginasi di browser.</Alert>}
 
                 <CustomDataTable
                     rows={filteredAssignments}

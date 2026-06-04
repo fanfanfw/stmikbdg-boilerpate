@@ -42,7 +42,7 @@ class AuthController extends Controller
             $userAccount = $user['account'];
 
             // verify role
-            $allowedRoles = ['is_admin', 'is_mhs'];
+            $allowedRoles = ['is_admin', 'is_mhs', 'is_dosen'];
             if (!in_array($role, $allowedRoles, true)) {
                 return self::changeUserRole();
             }
@@ -51,6 +51,8 @@ class AuthController extends Controller
                 Session::put('role', ['is_admin' => true]);
             } elseif ($role === 'is_mhs' && !empty($userAccount['is_mhs'])) {
                 Session::put('role', ['is_mhs' => true]);
+            } elseif ($role === 'is_dosen' && !empty($userAccount['is_dosen'])) {
+                Session::put('role', ['is_dosen' => true]);
             } else {
                 return self::changeUserRole();
             }
@@ -85,7 +87,7 @@ class AuthController extends Controller
 
     public function changeUserRole() {
         $tempSessionRole = Session::get('account');
-        $allowedKeys = !empty($tempSessionRole['is_admin']) ? ['is_admin'] : ['is_mhs'];
+        $allowedKeys = !empty($tempSessionRole['is_admin']) ? ['is_admin'] : ['is_mhs', 'is_dosen'];
         $data = [
             'roles' => array_filter($tempSessionRole, function ($item, $key) use ($allowedKeys) {
                 return in_array($key, $allowedKeys, true) && is_bool($item) && $item === true;

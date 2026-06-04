@@ -77,5 +77,4 @@ export const arsipApi = {
     downloadExportJob: (job) => download(`/admin/export-jobs/${job.export_job_id}/download`, `arsip-digital-export-${job.export_job_id}.zip`),
 
     auditLogs: (params) => get('/admin/audit-logs', params),
-    adminArchiveUsers: (params) => get('/admin/archive/users', params),
 };

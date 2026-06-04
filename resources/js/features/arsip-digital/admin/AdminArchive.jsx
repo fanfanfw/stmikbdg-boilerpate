@@ -58,32 +58,27 @@ export default function AdminArchive() {
         setUsersError('');
         setEndpointGap('');
         try {
-            const response = await arsipApi.adminArchiveUsers({ ...filters, per_page: 50 });
-            const unwrapped = unwrapList(response, ['users', 'archive_users', 'targets']);
-            setUsers(unwrapped.data);
-            setUsersMeta(unwrapped.meta);
+            const roles = filters.role ? [filters.role] : ['mahasiswa', 'dosen'];
+            const responses = await Promise.all(roles.map((role) => arsipApi.adminTargets({
+                role,
+                search: filters.search,
+                status: filters.status,
+                has_account: true,
+                per_page: 50,
+            })));
+            const targetUsers = responses.flatMap((response, index) => {
+                const unwrapped = unwrapList(response, ['targets', 'users']);
+                return unwrapped.data.map((user) => ({ ...user, role: user.role || user.owner_role || roles[index] }));
+            });
+            const firstMeta = responses.length === 1 ? unwrapList(responses[0], ['targets', 'users']).meta : null;
+            setUsers(targetUsers);
+            setUsersMeta(firstMeta);
         } catch (err) {
             const formatted = await formatArsipError(err);
-            if ([403, 404].includes(formatted.status)) {
-                try {
-                    const roles = filters.role ? [filters.role] : ['mahasiswa', 'dosen'];
-                    const responses = await Promise.all(roles.map((role) => arsipApi.adminTargets({ role, search: filters.search, status: filters.status, per_page: 50 })));
-                    const fallbackUsers = responses.flatMap((response, index) => unwrapList(response, ['targets', 'users']).data.map((user) => ({ ...user, role: user.role || user.owner_role || roles[index] })));
-                    setUsers(fallbackUsers);
-                    setUsersMeta(null);
-                    setEndpointGap('Endpoint /admin/archive/users tidak tersedia. Fallback memakai /admin/targets untuk memilih pengguna; jumlah file mungkin tidak lengkap.');
-                } catch (fallbackErr) {
-                    const fallbackFormatted = await formatArsipError(fallbackErr);
-                    setEndpointGap(`Endpoint /admin/archive/users unavailable dan fallback /admin/targets gagal: ${fallbackFormatted.message}`);
-                    setUsers([]);
-                    setUsersMeta(null);
-                }
-            } else {
-                setUsersError(formatted.message);
-                customSwal.toast.error({ message: formatted.message });
-                setUsers([]);
-                setUsersMeta(null);
-            }
+            setUsersError(formatted.message);
+            customSwal.toast.error({ message: formatted.message });
+            setUsers([]);
+            setUsersMeta(null);
         } finally {
             setUsersLoading(false);
         }
@@ -192,7 +187,6 @@ export default function AdminArchive() {
                 </TextField>
                 <Button variant="contained" startIcon={<SearchOutlined />} onClick={loadUsers} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Terapkan Filter</Button>
             </section>
-            {!usersMeta && users.length > 0 && <Alert severity="info" sx={{ mb: 2, borderRadius: '0.5rem' }}>Backend pagination pengguna belum tersedia. Data dipaginasi di browser.</Alert>}
             <section className="bg-white rounded-lg border border-zinc-200 mb-4">
                 <CustomDataTable rows={users} columns={userColumns} loading={usersLoading} getRowId={(row) => userId(row)} pageSize={25} pageSizeOptions={[25, 50]} />
             </section>
@@ -202,7 +196,6 @@ export default function AdminArchive() {
                     <div className="flex gap-2"><Button variant="outlined" disabled={!selectedUser || filesLoading} onClick={() => loadFiles()} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Muat File</Button><Button variant="contained" startIcon={<CloudUploadOutlined />} disabled={!selectedUser} onClick={() => setUploadOpen(true)} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Upload</Button></div>
                 </div>
                 {filesGap && <Alert severity="warning" sx={{ mb: 2, borderRadius: '0.5rem' }}>{filesGap}</Alert>}
-                {!filesMeta && files.length > 0 && <Alert severity="info" sx={{ mb: 2, borderRadius: '0.5rem' }}>Backend pagination file belum tersedia. Data dipaginasi di browser.</Alert>}
                 <CustomDataTable rows={files} columns={fileColumns} loading={filesLoading} getRowId={(row) => fileId(row)} pageSize={25} pageSizeOptions={[25, 50]} />
             </section>
             <Dialog open={uploadOpen} onClose={closeUpload} fullWidth maxWidth="sm">

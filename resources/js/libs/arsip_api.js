@@ -152,9 +152,6 @@ export const arsipApi = {
     // Audit Logs
     auditLogs: (params) => getJson('/admin/audit-logs', params),
 
-    // Admin Archive Users
-    adminArchiveUsers: (params) => getJson('/admin/archive/users', params),
-
     // Segments (future use)
     segments: (params) => getJson('/admin/segments', params),
     createSegment: (payload) => postJson('/admin/segments', payload),

@@ -351,12 +351,6 @@ export default function PersonalArchive() {
                 }
             />
 
-            {!listData.meta && listData.data.length > 0 && (
-                <Alert severity="info" className="mb-4">
-                    Backend pagination file belum tersedia. Data dipaginasi di browser.
-                </Alert>
-            )}
-
             <CustomDataTable
                 rows={listData.data}
                 columns={columns}
