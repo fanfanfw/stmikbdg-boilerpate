@@ -6,7 +6,6 @@ import { customSwal } from '../../../components/CustomSwal';
 import PageHeader from '../../../components/PageHeader';
 import StatusChip from '../../../components/StatusChip';
 import CustomDataTable from '../../../components/CustomDataTable';
-import CustomLoading from '../../../components/CustomLoading';
 import {
     Button,
     TextField,
@@ -24,8 +23,6 @@ import {
     DownloadOutlined,
     DeleteOutlined,
     RestoreOutlined,
-    SearchOutlined,
-    RefreshOutlined,
 } from '@mui/icons-material';
 
 const initialFilters = {
@@ -347,88 +344,31 @@ export default function PersonalArchive() {
                         size="small"
                         startIcon={<CloudUploadOutlined />}
                         onClick={handleUploadOpen}
-                        sx={{
-                            textTransform: 'none',
-                            fontFamily: 'Plus Jakarta Sans, sans-serif',
-                            fontSize: '0.75rem',
-                            borderRadius: '0.5rem',
-                        }}
+                        sx={{ textTransform: 'none', borderRadius: '0.5rem' }}
                     >
                         Upload File
                     </Button>
                 }
             />
 
-            {/* Filter Bar */}
-            <div className="bg-white rounded-lg border border-zinc-200 p-4 mb-4">
-                <div className="flex items-center gap-3 flex-wrap">
-                    <TextField
-                        size="small"
-                        placeholder="Cari file..."
-                        value={filters.search}
-                        onChange={(e) => handleFilterChange('search', e.target.value)}
-                        InputProps={{
-                            startAdornment: <SearchOutlined fontSize="small" className="text-zinc-400 mr-2" />,
-                        }}
-                        sx={{
-                            minWidth: 220,
-                            '& .MuiOutlinedInput-root': {
-                                fontFamily: 'Plus Jakarta Sans, sans-serif',
-                                fontSize: '0.75rem',
-                                borderRadius: '0.5rem',
-                            },
-                        }}
-                    />
-                    <TextField
-                        select
-                        size="small"
-                        value={filters.category_id}
-                        onChange={(e) => handleFilterChange('category_id', e.target.value)}
-                        label="Kategori"
-                        sx={{
-                            minWidth: 160,
-                            '& .MuiOutlinedInput-root': {
-                                fontFamily: 'Plus Jakarta Sans, sans-serif',
-                                fontSize: '0.75rem',
-                                borderRadius: '0.5rem',
-                            },
-                            '& .MuiInputLabel-root': {
-                                fontFamily: 'Plus Jakarta Sans, sans-serif',
-                                fontSize: '0.75rem',
-                            },
-                        }}
-                    >
-                        <MenuItem value="">Semua Kategori</MenuItem>
-                        {categories.map((cat) => (
-                            <MenuItem key={cat.category_id} value={cat.category_id}>
-                                {cat.name}
-                            </MenuItem>
-                        ))}
-                    </TextField>
-                    <Tooltip title="Refresh">
-                        <IconButton size="small" onClick={fetchFiles}>
-                            <RefreshOutlined fontSize="small" />
-                        </IconButton>
-                    </Tooltip>
-                </div>
-            </div>
+            {!listData.meta && listData.data.length > 0 && (
+                <Alert severity="info" className="mb-4">
+                    Backend pagination file belum tersedia. Data dipaginasi di browser.
+                </Alert>
+            )}
 
-            {/* Data Table */}
-            <div className="bg-white rounded-lg border border-zinc-200">
-                {!listData.meta && listData.data.length > 0 && <Alert severity="info" sx={{ m: 2, borderRadius: '0.5rem' }}>Backend pagination file belum tersedia. Data dipaginasi di browser.</Alert>}
-                <CustomDataTable
-                    rows={listData.data}
-                    columns={columns}
-                    loading={listData.loading}
-                    paginationMode={listData.meta ? 'server' : 'client'}
-                    rowCount={listData.meta?.total ?? listData.meta?.total_count ?? listData.meta?.recordsTotal ?? listData.data.length}
-                    paginationModel={{ page: filters.page, pageSize: filters.per_page }}
-                    onPaginationModelChange={handlePaginationChange}
-                    getRowId={(row) => fileId(row)}
-                    pageSize={filters.per_page}
-                    pageSizeOptions={[10, 25, 50]}
-                />
-            </div>
+            <CustomDataTable
+                rows={listData.data}
+                columns={columns}
+                loading={listData.loading}
+                paginationMode={listData.meta ? 'server' : 'client'}
+                rowCount={listData.meta?.total ?? listData.meta?.total_count ?? listData.meta?.recordsTotal ?? listData.data.length}
+                paginationModel={{ page: filters.page, pageSize: filters.per_page }}
+                onPaginationModelChange={handlePaginationChange}
+                getRowId={(row) => fileId(row)}
+                pageSize={filters.per_page}
+                pageSizeOptions={[10, 25, 50]}
+            />
 
             {/* Upload Dialog */}
             <Dialog
@@ -436,20 +376,14 @@ export default function PersonalArchive() {
                 onClose={handleUploadClose}
                 maxWidth="sm"
                 fullWidth
-                PaperProps={{
-                    sx: {
-                        borderRadius: '0.5rem',
-                        fontFamily: 'Plus Jakarta Sans, sans-serif',
-                    },
-                }}
             >
-                <DialogTitle sx={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontSize: '1rem', fontWeight: 600 }}>
+                <DialogTitle sx={{ fontSize: '1rem', fontWeight: 600 }}>
                     Upload File Baru
                 </DialogTitle>
                 <DialogContent>
                     <div className="flex flex-col gap-4 mt-2">
                         {uploadError && (
-                            <Alert severity="error" sx={{ fontSize: '0.75rem', fontFamily: 'Plus Jakarta Sans, sans-serif' }}>
+                            <Alert severity="error">
                                 {uploadError}
                             </Alert>
                         )}
@@ -457,12 +391,7 @@ export default function PersonalArchive() {
                             variant="outlined"
                             component="label"
                             startIcon={<CloudUploadOutlined />}
-                            sx={{
-                                textTransform: 'none',
-                                fontFamily: 'Plus Jakarta Sans, sans-serif',
-                                fontSize: '0.75rem',
-                                borderRadius: '0.5rem',
-                            }}
+                            sx={{ textTransform: 'none' }}
                         >
                             {uploadForm.file ? uploadForm.file.name : 'Pilih File'}
                             <input type="file" hidden onChange={handleFileChange} />
@@ -478,17 +407,6 @@ export default function PersonalArchive() {
                             value={uploadForm.category_id}
                             onChange={(e) => setUploadForm((prev) => ({ ...prev, category_id: e.target.value }))}
                             fullWidth
-                            sx={{
-                                '& .MuiOutlinedInput-root': {
-                                    fontFamily: 'Plus Jakarta Sans, sans-serif',
-                                    fontSize: '0.75rem',
-                                    borderRadius: '0.5rem',
-                                },
-                                '& .MuiInputLabel-root': {
-                                    fontFamily: 'Plus Jakarta Sans, sans-serif',
-                                    fontSize: '0.75rem',
-                                },
-                            }}
                         >
                             {categories.map((cat) => (
                                 <MenuItem key={cat.category_id} value={cat.category_id}>
@@ -502,17 +420,6 @@ export default function PersonalArchive() {
                             value={uploadForm.display_filename}
                             onChange={(e) => setUploadForm((prev) => ({ ...prev, display_filename: e.target.value }))}
                             fullWidth
-                            sx={{
-                                '& .MuiOutlinedInput-root': {
-                                    fontFamily: 'Plus Jakarta Sans, sans-serif',
-                                    fontSize: '0.75rem',
-                                    borderRadius: '0.5rem',
-                                },
-                                '& .MuiInputLabel-root': {
-                                    fontFamily: 'Plus Jakarta Sans, sans-serif',
-                                    fontSize: '0.75rem',
-                                },
-                            }}
                         />
                     </div>
                 </DialogContent>
@@ -520,7 +427,7 @@ export default function PersonalArchive() {
                     <Button
                         onClick={handleUploadClose}
                         size="small"
-                        sx={{ textTransform: 'none', fontFamily: 'Plus Jakarta Sans, sans-serif', fontSize: '0.75rem' }}
+                        sx={{ textTransform: 'none' }}
                     >
                         Batal
                     </Button>
@@ -529,12 +436,7 @@ export default function PersonalArchive() {
                         onClick={handleUploadSubmit}
                         disabled={uploading}
                         size="small"
-                        sx={{
-                            textTransform: 'none',
-                            fontFamily: 'Plus Jakarta Sans, sans-serif',
-                            fontSize: '0.75rem',
-                            borderRadius: '0.5rem',
-                        }}
+                        sx={{ textTransform: 'none' }}
                     >
                         {uploading ? 'Mengunggah...' : 'Upload'}
                     </Button>
