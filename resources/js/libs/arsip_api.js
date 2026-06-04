@@ -27,11 +27,17 @@ export const arsipApi = {
     // Files
     files: (params) => getJson('/files', params),
     uploadFile: (formData) => uploadFormData('/files', formData),
-    downloadFile: (file) =>
-        downloadBlob(
-            `/files/${file.file_id}/download`,
-            file.display_filename || file.original_filename,
-        ),
+    downloadFile: (file) => {
+        const fileId = file?.file_id ?? file?.id;
+        if (fileId == null) {
+            return { success: false, message: 'ID file tidak tersedia.' };
+        }
+
+        return downloadBlob(
+            `/files/${fileId}/download`,
+            file?.display_filename || file?.original_filename || file?.filename || `arsip-file-${fileId}`,
+        );
+    },
     deleteFile: (id, reason) => deleteJson(`/files/${id}`, { reason }),
     restoreFile: (id) => postJson(`/files/${id}/restore`),
     uploadForUser: (formData) => uploadFormData('/admin/files/upload-for-user', formData),
@@ -41,6 +47,7 @@ export const arsipApi = {
     adminTargets: (params) => getJson('/admin/targets', params),
     createRequest: (payload) => postJson('/admin/requests', payload),
     updateRequest: (id, payload) => putJson(`/admin/requests/${id}`, payload),
+    deleteRequest: (id) => deleteJson(`/admin/requests/${id}`),
     requestDetail: (id) => getJson(`/admin/requests/${id}`),
     previewRequestTargets: (payload) => postJson('/admin/requests/preview-targets', payload),
     appendRequestTargets: (id, payload) => postJson(`/admin/requests/${id}/targets`, payload),
@@ -57,11 +64,17 @@ export const arsipApi = {
         postJson('/admin/request-assignments/bulk-approve', { assignment_ids: assignmentIds }),
     bulkRejectAssignments: (assignmentIds, reason) =>
         postJson('/admin/request-assignments/bulk-reject', { assignment_ids: assignmentIds, reason }),
-    downloadRequestFile: (requestFile) =>
-        downloadBlob(
-            `/admin/request-files/${requestFile.request_file_id}/download`,
-            requestFile.file?.display_filename || `request-file-${requestFile.request_file_id}`,
-        ),
+    downloadRequestFile: (requestFile) => {
+        const requestFileId = requestFile?.request_file_id ?? requestFile?.id ?? requestFile?.file_id;
+        if (requestFileId == null) {
+            return { success: false, message: 'ID file tidak tersedia.' };
+        }
+
+        return downloadBlob(
+            `/admin/request-files/${requestFileId}/download`,
+            requestFile?.file?.display_filename || requestFile?.display_filename || requestFile?.original_filename || requestFile?.filename || `request-file-${requestFileId}`,
+        );
+    },
 
     // User Requests
     userRequests: () => getJson('/requests'),
@@ -86,6 +99,7 @@ export const arsipApi = {
     distributions: (params) => getJson('/admin/distributions', params),
     createDistribution: (payload) => postJson('/admin/distributions', payload),
     updateDistribution: (id, payload) => putJson(`/admin/distributions/${id}`, payload),
+    deleteDistribution: (id) => deleteJson(`/admin/distributions/${id}`),
     distributionDetail: (id) => getJson(`/admin/distributions/${id}`),
     previewDistributionTargets: (payload) =>
         postJson('/admin/distributions/preview-targets', payload),
@@ -107,21 +121,33 @@ export const arsipApi = {
 
     // User Distributions
     userDistributions: () => getJson('/distributions'),
-    downloadDistributionFile: (file) =>
-        downloadBlob(
-            `/distribution-files/${file.file_id}/download`,
-            file.display_filename || file.original_filename,
-        ),
+    downloadDistributionFile: (file) => {
+        const fileId = file?.file_id ?? file?.id ?? file?.distribution_file_id;
+        if (fileId == null) {
+            return { success: false, message: 'ID file tidak tersedia.' };
+        }
+
+        return downloadBlob(
+            `/distribution-files/${fileId}/download`,
+            file?.display_filename || file?.original_filename || file?.filename || `distribution-file-${fileId}`,
+        );
+    },
 
     // Export Jobs
     exportJobs: (params) => getJson('/admin/export-jobs', params),
     createExportJob: (payload) => postJson('/admin/export-jobs', payload),
     exportJob: (id) => getJson(`/admin/export-jobs/${id}`),
-    downloadExportJob: (job) =>
-        downloadBlob(
-            `/admin/export-jobs/${job.export_job_id}/download`,
-            `arsip-digital-export-${job.export_job_id}.zip`,
-        ),
+    downloadExportJob: (job) => {
+        const jobId = job?.export_job_id ?? job?.id;
+        if (jobId == null) {
+            return { success: false, message: 'ID file tidak tersedia.' };
+        }
+
+        return downloadBlob(
+            `/admin/export-jobs/${jobId}/download`,
+            job?.filename || job?.original_filename || `arsip-digital-export-${jobId}.zip`,
+        );
+    },
 
     // Audit Logs
     auditLogs: (params) => getJson('/admin/audit-logs', params),

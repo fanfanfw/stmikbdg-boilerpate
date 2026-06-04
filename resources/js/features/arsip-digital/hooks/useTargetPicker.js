@@ -1,4 +1,4 @@
-import { useReducer, useCallback, useMemo, useRef } from 'react';
+import { useReducer, useCallback, useEffect, useMemo, useRef } from 'react';
 
 // --------------------------------------------------------------------------
 // useTargetPicker - Skeleton TargetPicker hook using useReducer
@@ -17,7 +17,6 @@ const initialState = {
     selectingAllFiltered: false,
 };
 
-const SAFETY_MAX_PAGE = 10;
 
 function reducer(state, action) {
     switch (action.type) {
@@ -95,6 +94,7 @@ function reducer(state, action) {
                 ...state,
                 error: action.payload,
                 loading: false,
+                selectingAllFiltered: false,
             };
 
         case 'SET_SELECTING_ALL_FILTERED':
@@ -114,9 +114,15 @@ function reducer(state, action) {
  */
 export function useTargetPicker({ fetchTargets } = {}) {
     const [state, dispatch] = useReducer(reducer, initialState);
-    const queryKeyRef = useRef(null);
+    const stateRef = useRef(initialState);
+    const selectAllVersionRef = useRef(0);
+
+    useEffect(() => {
+        stateRef.current = state;
+    }, [state]);
 
     const setRole = useCallback((role) => {
+        selectAllVersionRef.current += 1;
         dispatch({ type: 'SET_ROLE', payload: role });
     }, []);
 
@@ -125,7 +131,7 @@ export function useTargetPicker({ fetchTargets } = {}) {
     }, []);
 
     const setFilters = useCallback((filters) => {
-        queryKeyRef.current = JSON.stringify(filters);
+        selectAllVersionRef.current += 1;
         dispatch({ type: 'SET_FILTERS', payload: filters });
     }, []);
 
@@ -149,49 +155,59 @@ export function useTargetPicker({ fetchTargets } = {}) {
         dispatch({ type: 'SET_ERROR', payload: error });
     }, []);
 
-    // Select all filtered targets across pages (only those with has_account === true)
-    const selectAllFiltered = useCallback(async () => {
-        if (!fetchTargets) return;
+    const selectAllFiltered = useCallback(async ({ filters, targets = [], meta = null, expectedQueryKey = null } = {}) => {
+        const activeFilters = filters || stateRef.current.filters;
+        const allIdentifiers = [];
+        selectAllVersionRef.current += 1;
+        const requestVersion = selectAllVersionRef.current;
+        const isCurrentRequest = () => selectAllVersionRef.current === requestVersion
+            && (!expectedQueryKey || stateRef.current.loadedTargetQueryKey === expectedQueryKey);
+        const appendIdentifiers = (items) => {
+            for (const target of items) {
+                const id = target.identifier || target.id;
+                if (id && !allIdentifiers.includes(String(id))) allIdentifiers.push(String(id));
+            }
+        };
+
+        if (!fetchTargets || !isCurrentRequest()) return;
 
         dispatch({ type: 'SET_SELECTING_ALL_FILTERED', payload: true });
-        const snapshotKey = queryKeyRef.current;
-        const allIdentifiers = [];
 
         try {
-            for (let page = 1; page <= SAFETY_MAX_PAGE; page++) {
-                // Stop if filters changed during loop
-                if (queryKeyRef.current !== snapshotKey) {
+            if (!meta?.last_page) {
+                appendIdentifiers(targets);
+                if (isCurrentRequest()) dispatch({ type: 'SELECT_ALL_FILTERED', payload: allIdentifiers });
+                else dispatch({ type: 'SET_SELECTING_ALL_FILTERED', payload: false });
+                return;
+            }
+
+            const lastPage = Number(meta.last_page || 1);
+            if (!Number.isFinite(lastPage) || lastPage < 1) {
+                if (isCurrentRequest()) dispatch({ type: 'SELECT_ALL_FILTERED', payload: allIdentifiers });
+                else dispatch({ type: 'SET_SELECTING_ALL_FILTERED', payload: false });
+                return;
+            }
+
+            for (let page = 1; page <= lastPage; page++) {
+                if (!isCurrentRequest()) {
                     dispatch({ type: 'SET_SELECTING_ALL_FILTERED', payload: false });
                     return;
                 }
 
-                const result = await fetchTargets(state.filters, page);
-                const targets = result?.data || [];
-
-                for (const target of targets) {
-                    if (target.has_account === true) {
-                        const id = target.identifier || target.id;
-                        if (id && !allIdentifiers.includes(id)) {
-                            allIdentifiers.push(id);
-                        }
-                    }
-                }
-
-                const meta = result?.meta;
-                if (!meta || page >= meta.last_page) break;
+                const result = await fetchTargets(activeFilters, page);
+                appendIdentifiers(result?.data || []);
             }
 
-            // Final check: filters may have changed
-            if (queryKeyRef.current !== snapshotKey) {
+            if (!isCurrentRequest()) {
                 dispatch({ type: 'SET_SELECTING_ALL_FILTERED', payload: false });
                 return;
             }
 
             dispatch({ type: 'SELECT_ALL_FILTERED', payload: allIdentifiers });
         } catch (err) {
-            dispatch({ type: 'SET_ERROR', payload: err?.message || 'Gagal memuat semua target.' });
+            if (isCurrentRequest()) dispatch({ type: 'SET_ERROR', payload: err?.message || 'Gagal memuat semua target.' });
         }
-    }, [fetchTargets, state.filters]);
+    }, [fetchTargets]);
 
     // Build payload for API submission
     const buildPayload = useCallback(() => {

@@ -1,12 +1,540 @@
-import { useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import Swal from 'sweetalert2';
+import { arsipApi } from '../../../libs/arsip_api';
+import { formatArsipError } from '../../../libs/arsip_http';
+import { bytes, dateTime } from '../../../libs/format';
+import { customSwal } from '../../../components/CustomSwal';
+import PageHeader from '../../../components/PageHeader';
+import StatusChip from '../../../components/StatusChip';
+import CustomDataTable from '../../../components/CustomDataTable';
+import CustomLoading from '../../../components/CustomLoading';
+import TargetPicker from '../components/TargetPicker';
+import {
+    Alert,
+    Button,
+    Checkbox,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
+    MenuItem,
+    TextField,
+} from '@mui/material';
+import ArrowBackOutlined from '@mui/icons-material/ArrowBackOutlined';
+import CloudUploadOutlined from '@mui/icons-material/CloudUploadOutlined';
+import DownloadOutlined from '@mui/icons-material/DownloadOutlined';
+import RefreshOutlined from '@mui/icons-material/RefreshOutlined';
+
+const buttonSx = {
+    borderRadius: '0.5rem',
+    textTransform: 'none',
+    fontFamily: 'Plus Jakarta Sans, sans-serif',
+};
+
+const panelClass = 'bg-white rounded-lg border border-zinc-200 p-4';
+
+function unwrapRequest(response) {
+    const data = response?.data ?? response ?? {};
+    return {
+        request: data.request ?? data,
+        progress: data.progress ?? {},
+        assignments: data.assignments ?? data.request?.assignments ?? [],
+    };
+}
+
+function unwrapProgress(response) {
+    const data = response?.data ?? response ?? {};
+    return data.progress ?? data;
+}
+
+function unwrapAssignments(response) {
+    const data = response?.data ?? response ?? {};
+    const list = Array.isArray(data) ? data : data.assignments ?? data.data ?? [];
+    return {
+        data: Array.isArray(list) ? list : [],
+        meta: data.meta ?? data.pagination ?? response?.meta ?? null,
+    };
+}
+
+function unwrapPreview(response) {
+    const data = response?.data ?? response ?? {};
+    return data.preview ?? data;
+}
+
+function requestId(request) {
+    return request?.request_id ?? request?.id;
+}
+
+function assignmentId(assignment) {
+    return assignment.assignment_id ?? assignment.id;
+}
+
+function currentFiles(assignment) {
+    return (assignment?.request_files || assignment?.files || []).filter((item) => item.is_current !== false);
+}
+
+function fileName(requestFile) {
+    const file = requestFile?.file || requestFile;
+    return file?.display_filename || file?.original_filename || file?.filename || `File #${requestFile?.request_file_id || file?.file_id || '-'}`;
+}
+
+function fileSize(requestFile) {
+    const file = requestFile?.file || requestFile;
+    return file?.file_size_bytes ?? file?.file_size ?? file?.size;
+}
+
+function progressValue(progress, keys) {
+    for (const key of keys) {
+        if (progress?.[key] !== undefined && progress?.[key] !== null) return progress[key];
+    }
+    return 0;
+}
+
+async function confirmAction(title, text, confirmButtonText = 'Ya') {
+    const result = await Swal.fire({
+        title,
+        text,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText,
+        cancelButtonText: 'Batal',
+    });
+    return result.isConfirmed;
+}
+
+async function promptReason(title, text) {
+    const result = await Swal.fire({
+        title,
+        text,
+        input: 'textarea',
+        inputLabel: 'Alasan penolakan',
+        inputPlaceholder: 'Tulis alasan agar pengguna tahu yang perlu diperbaiki.',
+        inputValidator: (value) => (value?.trim() ? null : 'Alasan wajib diisi.'),
+        showCancelButton: true,
+        confirmButtonText: 'Reject',
+        cancelButtonText: 'Batal',
+    });
+    return result.isConfirmed ? result.value?.trim() : '';
+}
 
 export default function AdminRequestDetail() {
     const { id } = useParams();
+    const navigate = useNavigate();
+    const [request, setRequest] = useState(null);
+    const [progress, setProgress] = useState({});
+    const [assignments, setAssignments] = useState([]);
+    const [assignmentsMeta, setAssignmentsMeta] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [assignmentsLoading, setAssignmentsLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [filters, setFilters] = useState({ search: '', status: '', late: '' });
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [actionLoading, setActionLoading] = useState(false);
+    const [appendOpen, setAppendOpen] = useState(false);
+    const [appendPayload, setAppendPayload] = useState(null);
+    const [appendPreview, setAppendPreview] = useState(null);
+    const [appendLoading, setAppendLoading] = useState(false);
+    const [uploadOpen, setUploadOpen] = useState(false);
+    const [uploadAssignment, setUploadAssignment] = useState(null);
+    const [selectedFile, setSelectedFile] = useState(null);
+    const [uploadNote, setUploadNote] = useState('');
+
+    const filteredAssignments = assignments;
+
+    const selectedPageAssignments = useMemo(
+        () => filteredAssignments.filter((assignment) => selectedIds.includes(assignmentId(assignment))),
+        [filteredAssignments, selectedIds],
+    );
+
+    const approvableSelectedIds = useMemo(
+        () => selectedPageAssignments.filter((assignment) => currentFiles(assignment).length > 0).map(assignmentId),
+        [selectedPageAssignments],
+    );
+
+    const allPageSelected = filteredAssignments.length > 0 && filteredAssignments.every((assignment) => selectedIds.includes(assignmentId(assignment)));
+
+    const loadDetail = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const [detailResponse, progressResponse] = await Promise.all([
+                arsipApi.requestDetail(id),
+                arsipApi.requestProgress(id),
+            ]);
+            const detail = unwrapRequest(detailResponse);
+            setRequest(detail.request);
+            setProgress({ ...detail.progress, ...unwrapProgress(progressResponse) });
+            if (detail.assignments.length && !assignments.length) setAssignments(detail.assignments);
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            setError(formatted.message);
+            customSwal.toast.error({ message: formatted.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const loadAssignments = async () => {
+        setAssignmentsLoading(true);
+        try {
+            const response = await arsipApi.requestAssignments(id, {
+                search: filters.search,
+                status: filters.status,
+                is_late: filters.late === '' ? undefined : filters.late === 'late',
+            });
+            const unwrapped = unwrapAssignments(response);
+            setAssignments(unwrapped.data);
+            setAssignmentsMeta(unwrapped.meta);
+            setSelectedIds([]);
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            customSwal.toast.error({ message: formatted.message });
+        } finally {
+            setAssignmentsLoading(false);
+        }
+    };
+
+    const refreshAll = async () => {
+        await Promise.all([loadDetail(), loadAssignments()]);
+    };
+
+    useEffect(() => {
+        refreshAll();
+    }, [id]);
+
+    const handleFilterChange = (key, value) => {
+        setFilters((prev) => ({ ...prev, [key]: value }));
+    };
+
+    const runLifecycle = async (action, title, text, success) => {
+        if (!request || !(await confirmAction(title, text))) return;
+        setActionLoading(true);
+        try {
+            await action(requestId(request));
+            customSwal.toast.success({ message: success });
+            await refreshAll();
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            customSwal.toast.error({ message: formatted.message });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const approve = async (assignment) => {
+        if (currentFiles(assignment).length < 1) return;
+        if (!(await confirmAction('Approve assignment?', `${assignment.identifier} - ${assignment.name_snapshot || 'tanpa nama'}`, 'Approve'))) return;
+        setActionLoading(true);
+        try {
+            await arsipApi.approveAssignment(assignmentId(assignment));
+            customSwal.toast.success({ message: 'Assignment disetujui.' });
+            await refreshAll();
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            customSwal.toast.error({ message: formatted.message });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const reject = async (assignment) => {
+        const reason = await promptReason('Reject assignment?', `${assignment.identifier} - ${assignment.name_snapshot || 'tanpa nama'}`);
+        if (!reason) return;
+        setActionLoading(true);
+        try {
+            await arsipApi.rejectAssignment(assignmentId(assignment), reason);
+            customSwal.toast.success({ message: 'Assignment ditolak.' });
+            await refreshAll();
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            customSwal.toast.error({ message: formatted.message });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const bulkApprove = async () => {
+        if (!approvableSelectedIds.length) return;
+        if (!(await confirmAction('Bulk approve assignment?', `${approvableSelectedIds.length} assignment di halaman ini akan disetujui.`, 'Bulk approve'))) return;
+        setActionLoading(true);
+        try {
+            await arsipApi.bulkApproveAssignments(approvableSelectedIds);
+            customSwal.toast.success({ message: 'Bulk approve selesai.' });
+            await refreshAll();
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            customSwal.toast.error({ message: formatted.message });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const bulkReject = async () => {
+        if (!selectedPageAssignments.length) return;
+        const reason = await promptReason('Bulk reject assignment?', `${selectedPageAssignments.length} assignment di halaman ini akan ditolak.`);
+        if (!reason) return;
+        setActionLoading(true);
+        try {
+            await arsipApi.bulkRejectAssignments(selectedPageAssignments.map(assignmentId), reason);
+            customSwal.toast.success({ message: 'Bulk reject selesai.' });
+            await refreshAll();
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            customSwal.toast.error({ message: formatted.message });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const downloadRequestFile = async (requestFile) => {
+        try {
+            await arsipApi.downloadRequestFile(requestFile);
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            customSwal.toast.error({ message: formatted.message });
+        }
+    };
+
+    const openUpload = (assignment) => {
+        setUploadAssignment(assignment);
+        setSelectedFile(null);
+        setUploadNote('');
+        setUploadOpen(true);
+    };
+
+    const closeUpload = () => {
+        setUploadOpen(false);
+        setUploadAssignment(null);
+        setSelectedFile(null);
+        setUploadNote('');
+    };
+
+    const uploadForUser = async () => {
+        if (!selectedFile || !uploadAssignment) return;
+        setActionLoading(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('owner_role', uploadAssignment.target_role || request?.target_role || 'mahasiswa');
+            formData.append('owner_identifier', uploadAssignment.identifier);
+            formData.append('request_assignment_id', assignmentId(uploadAssignment));
+            formData.append('display_filename', selectedFile.name);
+            if (request?.category_id) formData.append('category_id', request.category_id);
+            if (uploadNote) formData.append('note', uploadNote);
+            await arsipApi.uploadForUser(formData);
+            customSwal.toast.success({ message: 'File user berhasil diupload admin.' });
+            closeUpload();
+            await refreshAll();
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            customSwal.toast.error({ message: formatted.message });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const previewAppendTargets = async () => {
+        if (!appendPayload) return;
+        setAppendLoading(true);
+        try {
+            const response = await arsipApi.previewRequestTargets(appendPayload);
+            setAppendPreview(unwrapPreview(response));
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            customSwal.toast.error({ message: formatted.message });
+        } finally {
+            setAppendLoading(false);
+        }
+    };
+
+    const appendTargets = async () => {
+        if (!appendPayload || !(await confirmAction('Tambah target?', 'Target tambahan valid akan dibuat sebagai assignment.', 'Tambahkan'))) return;
+        setAppendLoading(true);
+        try {
+            await arsipApi.appendRequestTargets(requestId(request), appendPayload);
+            customSwal.toast.success({ message: 'Target tambahan berhasil diproses.' });
+            setAppendOpen(false);
+            setAppendPreview(null);
+            await refreshAll();
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            customSwal.toast.error({ message: formatted.message });
+        } finally {
+            setAppendLoading(false);
+        }
+    };
+
+    const togglePageSelection = (checked) => {
+        const pageIds = filteredAssignments.map(assignmentId);
+        if (checked) {
+            setSelectedIds(Array.from(new Set([...selectedIds, ...pageIds])));
+            return;
+        }
+        setSelectedIds(selectedIds.filter((item) => !pageIds.includes(item)));
+    };
+
+    const toggleAssignment = (targetId) => {
+        setSelectedIds((prev) => prev.includes(targetId) ? prev.filter((item) => item !== targetId) : [...prev, targetId]);
+    };
+
+    const columns = [
+        { field: 'select', headerName: '', width: 55, sortable: false, filterable: false, renderHeader: () => <Checkbox size="small" checked={allPageSelected} onChange={(event) => togglePageSelection(event.target.checked)} />, renderCell: (params) => <Checkbox size="small" checked={selectedIds.includes(assignmentId(params.row))} onChange={() => toggleAssignment(assignmentId(params.row))} /> },
+        { field: 'identifier', headerName: 'Identifier', width: 130, valueGetter: (value, row) => row.identifier || '-' },
+        { field: 'name_snapshot', headerName: 'Nama', flex: 1, minWidth: 180, valueGetter: (value, row) => row.name_snapshot || '-' },
+        { field: 'role', headerName: 'Role/Angkatan', width: 150, renderCell: (params) => `${params.row.target_role || request?.target_role || '-'}${params.row.angkatan_snapshot ? ` · ${params.row.angkatan_snapshot}` : ''}` },
+        { field: 'status', headerName: 'Status', width: 150, renderCell: (params) => <StatusChip status={params.row.status} /> },
+        { field: 'late', headerName: 'Late', width: 90, renderCell: (params) => params.row.is_late ? <StatusChip status="late" /> : '-' },
+        { field: 'files', headerName: 'Current Files', width: 240, sortable: false, renderCell: (params) => {
+            const files = currentFiles(params.row);
+            if (!files.length) return 'Belum ada file';
+            return <div className="flex flex-col gap-1">{files.map((file) => <button key={file.request_file_id || file.file_id} type="button" className="text-blue-600 hover:underline text-left" onClick={() => downloadRequestFile(file)}>{fileName(file)} · {bytes(fileSize(file))}</button>)}</div>;
+        } },
+        { field: 'submitted_at', headerName: 'Submitted', width: 170, renderCell: (params) => dateTime(params.row.submitted_at) },
+        { field: 'verified_at', headerName: 'Verified', width: 170, renderCell: (params) => dateTime(params.row.verified_at || params.row.approved_at || params.row.rejected_at) },
+        { field: 'actions', headerName: 'Aksi', width: 260, sortable: false, filterable: false, renderCell: (params) => {
+            const files = currentFiles(params.row);
+            return (
+                <div className="flex gap-1 flex-wrap">
+                    <Button size="small" disabled={actionLoading || files.length < 1} onClick={() => approve(params.row)} sx={buttonSx}>Approve</Button>
+                    <Button size="small" color="error" disabled={actionLoading} onClick={() => reject(params.row)} sx={buttonSx}>Reject</Button>
+                    {files[0] && <Button size="small" onClick={() => downloadRequestFile(files[0])} sx={buttonSx}><DownloadOutlined sx={{ fontSize: 16 }} /></Button>}
+                    <Button size="small" variant="outlined" disabled={actionLoading || request?.status === 'archived'} onClick={() => openUpload(params.row)} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Upload</Button>
+                </div>
+            );
+        } },
+    ];
+
+    if (loading && !request) return <CustomLoading />;
 
     return (
         <div className="font-jakarta">
-            <h1 className="text-lg font-semibold text-zinc-800 mb-2">Detail Permintaan</h1>
-            <p className="text-xs text-zinc-500">Permintaan #{id}</p>
+            <PageHeader
+                title={request?.title || 'Detail Permintaan'}
+                subtitle="Kelola assignment, progres, verifikasi, upload admin, dan file request."
+                breadcrumbs={[{ label: 'Permintaan Berkas', href: '/permintaan' }, { label: request?.title || 'Detail' }]}
+                actions={
+                    <>
+                        <Button variant="outlined" startIcon={<ArrowBackOutlined />} onClick={() => navigate('/permintaan')} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Kembali</Button>
+                        <Button variant="outlined" startIcon={<RefreshOutlined />} onClick={refreshAll} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Refresh</Button>
+                    </>
+                }
+            />
+
+            {error && <Alert severity="error" sx={{ mb: 2, borderRadius: '0.5rem' }}>{error}</Alert>}
+
+            <section className={`${panelClass} mb-4`}>
+                <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+                    <div>
+                        <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">Metadata Request</p>
+                        <h2 className="text-base font-semibold text-zinc-800 mt-1">{request?.title || '-'}</h2>
+                        <p className="text-sm text-zinc-600 mt-2 whitespace-pre-line">{request?.description || 'Tanpa deskripsi.'}</p>
+                    </div>
+                    <StatusChip status={request?.status} />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-3 text-sm mb-4">
+                    <div className="rounded-lg bg-zinc-50 p-3"><span className="text-xs text-zinc-500">Target</span><strong className="block mt-1">{request?.target_role || '-'} · {request?.scope_type || '-'}</strong></div>
+                    <div className="rounded-lg bg-zinc-50 p-3"><span className="text-xs text-zinc-500">Deadline</span><strong className="block mt-1">{dateTime(request?.deadline_at)}</strong></div>
+                    <div className="rounded-lg bg-zinc-50 p-3"><span className="text-xs text-zinc-500">Dibuat</span><strong className="block mt-1">{dateTime(request?.created_at)}</strong></div>
+                    <div className="rounded-lg bg-zinc-50 p-3"><span className="text-xs text-zinc-500">Published</span><strong className="block mt-1">{dateTime(request?.published_at)}</strong></div>
+                    <div className="rounded-lg bg-zinc-50 p-3"><span className="text-xs text-zinc-500">Closed</span><strong className="block mt-1">{dateTime(request?.closed_at)}</strong></div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    {request?.status === 'draft' && <Button disabled={actionLoading} variant="contained" onClick={() => runLifecycle(arsipApi.publishRequest, 'Publish request?', 'Assignment akan dibuat untuk target request ini.', 'Request berhasil dipublish.')} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Publish</Button>}
+                    {request?.status === 'published' && <Button disabled={actionLoading} variant="outlined" onClick={() => setAppendOpen(true)} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Tambah Target</Button>}
+                    {request?.status === 'published' && <Button disabled={actionLoading} variant="outlined" onClick={() => runLifecycle(arsipApi.closeRequest, 'Tutup request?', 'Penerima tidak bisa upload file baru.', 'Request berhasil ditutup.')} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Tutup</Button>}
+                    {request?.status === 'closed' && <Button disabled={actionLoading} variant="contained" onClick={() => runLifecycle(arsipApi.reopenRequest, 'Buka lagi request?', 'Request akan aktif kembali.', 'Request berhasil dibuka lagi.')} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Reopen</Button>}
+                    {['draft', 'closed'].includes(request?.status) && <Button disabled={actionLoading} color="warning" onClick={() => runLifecycle(arsipApi.archiveRequest, 'Arsipkan request?', 'Request akan menjadi read-only.', 'Request berhasil diarsipkan.')} sx={buttonSx}>Arsipkan</Button>}
+                </div>
+            </section>
+
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4">
+                {[
+                    ['Total', progressValue(progress, ['total_assignments', 'total'])],
+                    ['Submitted', progressValue(progress, ['submitted', 'submitted_assignments'])],
+                    ['Approved', progressValue(progress, ['approved'])],
+                    ['Rejected', progressValue(progress, ['rejected'])],
+                    ['Pending', progressValue(progress, ['pending', 'not_submitted'])],
+                    ['Late', progressValue(progress, ['late', 'late_assignments'])],
+                ].map(([label, value]) => <div key={label} className="bg-white rounded-lg border border-zinc-200 p-4"><span className="text-xs text-zinc-500">{label}</span><strong className="block text-xl text-zinc-800 mt-1">{value}</strong></div>)}
+            </div>
+
+            <section className={panelClass}>
+                <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+                    <div>
+                        <h3 className="text-sm font-semibold text-zinc-800">Assignment</h3>
+                        <p className="text-xs text-zinc-500">Bulk selection mengikuti hasil filter backend yang sedang dimuat.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <Button variant="outlined" disabled={actionLoading || approvableSelectedIds.length < 1} onClick={bulkApprove} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Bulk Approve ({approvableSelectedIds.length})</Button>
+                        <Button variant="outlined" color="error" disabled={actionLoading || selectedPageAssignments.length < 1} onClick={bulkReject} sx={buttonSx}>Bulk Reject ({selectedPageAssignments.length})</Button>
+                    </div>
+                </div>
+
+                <div className="flex flex-wrap gap-3 mb-3">
+                    <TextField size="small" label="Cari" value={filters.search} onChange={(event) => handleFilterChange('search', event.target.value)} sx={{ minWidth: 220 }} />
+                    <TextField size="small" select label="Status" value={filters.status} onChange={(event) => handleFilterChange('status', event.target.value)} sx={{ minWidth: 180 }}>
+                        <MenuItem value="">Semua status</MenuItem>
+                        <MenuItem value="not_submitted">Belum submit</MenuItem>
+                        <MenuItem value="waiting_verification">Menunggu verifikasi</MenuItem>
+                        <MenuItem value="approved">Approved</MenuItem>
+                        <MenuItem value="rejected">Rejected</MenuItem>
+                    </TextField>
+                    <TextField size="small" select label="Deadline" value={filters.late} onChange={(event) => handleFilterChange('late', event.target.value)} sx={{ minWidth: 160 }}>
+                        <MenuItem value="">Semua</MenuItem>
+                        <MenuItem value="late">Terlambat</MenuItem>
+                        <MenuItem value="on_time">Tidak terlambat</MenuItem>
+                    </TextField>
+                    <Button variant="outlined" onClick={loadAssignments} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Terapkan</Button>
+                </div>
+
+                {!assignmentsMeta && <Alert severity="info" sx={{ mb: 2, borderRadius: '0.5rem' }}>Backend pagination assignment belum tersedia. Data difilter backend lalu dipaginasi di browser.</Alert>}
+
+                <CustomDataTable
+                    rows={filteredAssignments}
+                    columns={columns}
+                    loading={assignmentsLoading}
+                    getRowId={(row) => assignmentId(row)}
+                    pageSize={50}
+                    pageSizeOptions={[50]}
+                />
+            </section>
+
+            <Dialog open={appendOpen} onClose={() => setAppendOpen(false)} fullWidth maxWidth="lg">
+                <DialogTitle className="!font-jakarta">Tambah Target</DialogTitle>
+                <DialogContent dividers className="space-y-4">
+                    <TargetPicker initialRole={request?.target_role || 'mahasiswa'} value={{ target_role: request?.target_role || 'mahasiswa', scope_type: 'filter', target_filters: {}, target_identifiers: [] }} onChange={setAppendPayload} disabled={request?.status !== 'published'} />
+                    <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 flex items-center justify-between gap-3 flex-wrap">
+                        <div className="text-xs text-zinc-600">
+                            <strong>Preview tambah target</strong>
+                            <p>{appendPreview ? `${appendPreview.total_valid ?? 0} valid · ${appendPreview.total_invalid ?? 0} invalid` : 'Belum divalidasi.'}</p>
+                        </div>
+                        <Button variant="outlined" disabled={appendLoading} onClick={previewAppendTargets} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Preview</Button>
+                    </div>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setAppendOpen(false)} sx={buttonSx}>Batal</Button>
+                    <Button variant="contained" disabled={appendLoading || request?.status !== 'published'} onClick={appendTargets} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Tambahkan</Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={uploadOpen} onClose={closeUpload} fullWidth maxWidth="sm">
+                <DialogTitle className="!font-jakarta">Upload untuk User</DialogTitle>
+                <DialogContent dividers>
+                    <Alert severity="info" sx={{ mb: 2, borderRadius: '0.5rem' }}>
+                        Target: {uploadAssignment?.identifier || '-'} · {uploadAssignment?.name_snapshot || '-'}
+                    </Alert>
+                    <Button component="label" variant="outlined" startIcon={<CloudUploadOutlined />} fullWidth sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46', py: 2 }}>
+                        {selectedFile ? selectedFile.name : 'Pilih File'}
+                        <input type="file" hidden onChange={(event) => setSelectedFile(event.target.files?.[0] || null)} />
+                    </Button>
+                    <TextField fullWidth size="small" multiline minRows={2} label="Catatan" value={uploadNote} onChange={(event) => setUploadNote(event.target.value)} sx={{ mt: 2 }} />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={closeUpload} sx={buttonSx}>Batal</Button>
+                    <Button variant="contained" disabled={actionLoading || !selectedFile} onClick={uploadForUser} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Upload</Button>
+                </DialogActions>
+            </Dialog>
         </div>
     );
 }
