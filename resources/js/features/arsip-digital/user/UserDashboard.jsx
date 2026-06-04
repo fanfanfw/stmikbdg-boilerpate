@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Alert } from '@mui/material';
+import { Alert, Button } from '@mui/material';
 import {
     FolderOutlined,
     DescriptionOutlined,
@@ -65,7 +65,7 @@ export default function UserDashboard() {
             description: 'Total file tersimpan',
             icon: FolderOutlined,
             path: '/arsip-saya',
-            color: 'text-blue-600 bg-blue-50',
+            color: 'text-blue-600 bg-blue-50 border-blue-100',
         },
         {
             label: 'Permintaan Berkas',
@@ -73,7 +73,7 @@ export default function UserDashboard() {
             description: 'Permintaan aktif',
             icon: DescriptionOutlined,
             path: '/permintaan',
-            color: 'text-amber-600 bg-amber-50',
+            color: 'text-amber-600 bg-amber-50 border-amber-100',
         },
         {
             label: 'Berkas Kampus',
@@ -81,7 +81,7 @@ export default function UserDashboard() {
             description: 'Berkas tersedia',
             icon: LocalShippingOutlined,
             path: '/distribusi',
-            color: 'text-green-600 bg-green-50',
+            color: 'text-emerald-600 bg-emerald-50 border-emerald-100',
         },
     ];
 
@@ -89,7 +89,7 @@ export default function UserDashboard() {
         <div>
             <PageHeader
                 title={`Halo, ${displayName}`}
-                subtitle="Selamat datang di Arsip Digital STMIK Bandung"
+                subtitle="Ringkasan arsip pribadi, permintaan resmi, dan berkas kampus untuk akun aktif Anda."
             />
 
             {error && (
@@ -101,22 +101,48 @@ export default function UserDashboard() {
             <CustomLoading loading={loading}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
                     {cards.map((card) => (
-                        <div
+                        <button
+                            type="button"
                             key={card.path}
-                            className="rounded-lg border border-zinc-200 p-4 hover:shadow-sm transition-shadow cursor-pointer"
+                            className="group text-left rounded-lg border border-zinc-200 bg-white p-4 hover:-translate-y-0.5 hover:shadow-md hover:border-zinc-300 transition-all duration-150 cursor-pointer"
                             onClick={() => navigate(card.path)}
                         >
                             <div className="flex items-center justify-between mb-3">
-                                <div className={`p-2 rounded-lg ${card.color}`}>
+                                <div className={`h-10 w-10 rounded-md border flex items-center justify-center shadow-sm ${card.color}`}>
                                     <card.icon fontSize="small" />
                                 </div>
-                                <ArrowForwardOutlined fontSize="small" className="text-zinc-300" />
+                                <ArrowForwardOutlined fontSize="small" className="text-zinc-300 group-hover:text-blue-500 transition-colors" />
                             </div>
                             <p className="text-2xl font-semibold text-zinc-800">{card.value}</p>
                             <p className="text-xs text-zinc-500 mt-1">{card.description}</p>
                             <p className="text-xs font-medium text-zinc-700 mt-2">{card.label}</p>
-                        </div>
+                        </button>
                     ))}
+                </div>
+
+                <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50/60 p-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                    <div>
+                        <p className="text-sm font-semibold text-zinc-800">Mulai kelola arsip Anda</p>
+                        <p className="text-xs text-zinc-500 mt-1">Upload file pribadi atau penuhi permintaan berkas dari admin.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <Button
+                            variant="contained"
+                            size="small"
+                            onClick={() => navigate('/arsip-saya')}
+                            sx={{ textTransform: 'none', fontFamily: 'Plus Jakarta Sans, sans-serif', borderRadius: '0.5rem' }}
+                        >
+                            Buka Arsip Saya
+                        </Button>
+                        <Button
+                            variant="outlined"
+                            size="small"
+                            onClick={() => navigate('/permintaan')}
+                            sx={{ textTransform: 'none', fontFamily: 'Plus Jakarta Sans, sans-serif', borderRadius: '0.5rem' }}
+                        >
+                            Lihat Permintaan
+                        </Button>
+                    </div>
                 </div>
             </CustomLoading>
         </div>

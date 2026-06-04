@@ -9,7 +9,7 @@ import DescriptionOutlined from '@mui/icons-material/DescriptionOutlined';
 import FolderOutlined from '@mui/icons-material/FolderOutlined';
 import PeopleAltOutlined from '@mui/icons-material/PeopleAltOutlined';
 
-const cardClass = 'bg-white rounded-lg border border-zinc-200 p-4 flex items-start justify-between gap-4';
+const cardClass = 'bg-white rounded-lg border border-zinc-200 p-4 flex items-start justify-between gap-4 hover:-translate-y-0.5 hover:shadow-md hover:border-zinc-300 transition-all duration-150';
 
 function unwrapSummary(response) {
     const data = response?.data ?? response ?? {};
@@ -76,7 +76,7 @@ export default function AdminDashboard() {
         <div className="font-jakarta">
             <PageHeader
                 title="Dashboard Admin"
-                subtitle="Ringkasan minimal arsip digital dan pintasan admin."
+                subtitle="Ringkasan operasional Arsip Digital dan pintasan untuk pekerjaan admin."
             />
 
             {error && <Alert severity="error" sx={{ mb: 2, borderRadius: '0.5rem' }}>{error}</Alert>}
@@ -84,7 +84,7 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 {cards.map((card) => (
                     <section key={card.title} className={cardClass}>
-                        <div>
+                        <div className="min-w-0">
                             <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">{card.title}</p>
                             <strong className="block text-2xl text-zinc-800 mt-2">{card.value}</strong>
                             <p className="text-xs text-zinc-500 mt-2">{card.subtitle}</p>
@@ -96,13 +96,19 @@ export default function AdminDashboard() {
                 ))}
             </div>
 
-            <div className="bg-white rounded-lg border border-zinc-200 p-4 flex flex-wrap gap-2">
+            <div className="bg-zinc-50/60 rounded-lg border border-zinc-200 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                    <p className="text-sm font-semibold text-zinc-800">Aksi cepat admin</p>
+                    <p className="text-xs text-zinc-500 mt-1">Kelola permintaan dan arsip pengguna dari pintasan utama.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
                 <Button component={Link} to="/permintaan" variant="contained" sx={{ borderRadius: '0.5rem', textTransform: 'none', backgroundColor: '#2563eb', fontFamily: 'Plus Jakarta Sans, sans-serif' }}>
                     Kelola Permintaan
                 </Button>
                 <Button component={Link} to="/arsip-pengguna" variant="outlined" sx={{ borderRadius: '0.5rem', textTransform: 'none', borderColor: '#e4e4e7', color: '#3f3f46', fontFamily: 'Plus Jakarta Sans, sans-serif' }}>
                     Arsip Pengguna
                 </Button>
+                </div>
             </div>
         </div>
     );
