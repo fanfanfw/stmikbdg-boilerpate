@@ -49,6 +49,10 @@ function unwrapListResponse(response, key) {
     };
 }
 
+function fileId(file) {
+    return file?.file_id ?? file?.id;
+}
+
 function normalizeExtensions(value) {
     if (Array.isArray(value)) {
         return value
@@ -155,7 +159,7 @@ export default function PersonalArchive() {
             message: `Apakah Anda yakin ingin menghapus "${file.display_filename}"?`,
             callback: async () => {
                 try {
-                    await arsipApi.deleteFile(file.file_id, 'Dihapus oleh pengguna');
+                    await arsipApi.deleteFile(fileId(file), 'Dihapus oleh pengguna');
                     customSwal.toast.success({ message: 'File berhasil dihapus' });
                     fetchFiles();
                 } catch (err) {
@@ -168,7 +172,7 @@ export default function PersonalArchive() {
 
     const handleRestore = async (file) => {
         try {
-            await arsipApi.restoreFile(file.file_id);
+            await arsipApi.restoreFile(fileId(file));
             customSwal.toast.success({ message: 'File berhasil dipulihkan' });
             fetchFiles();
         } catch (err) {
@@ -295,6 +299,8 @@ export default function PersonalArchive() {
                         <IconButton
                             size="small"
                             color="primary"
+                            aria-label="Download file"
+                            disabled={!fileId(params.row)}
                             onClick={() => handleDownload(params.row)}
                         >
                             <DownloadOutlined fontSize="small" />
@@ -305,6 +311,8 @@ export default function PersonalArchive() {
                             <IconButton
                                 size="small"
                                 color="success"
+                                aria-label="Pulihkan file"
+                                disabled={!fileId(params.row)}
                                 onClick={() => handleRestore(params.row)}
                             >
                                 <RestoreOutlined fontSize="small" />
@@ -315,6 +323,8 @@ export default function PersonalArchive() {
                             <IconButton
                                 size="small"
                                 color="error"
+                                aria-label="Hapus file"
+                                disabled={!fileId(params.row)}
                                 onClick={() => handleDelete(params.row)}
                             >
                                 <DeleteOutlined fontSize="small" />
@@ -405,15 +415,17 @@ export default function PersonalArchive() {
 
             {/* Data Table */}
             <div className="bg-white rounded-lg border border-zinc-200">
+                {!listData.meta && listData.data.length > 0 && <Alert severity="info" sx={{ m: 2, borderRadius: '0.5rem' }}>Backend pagination file belum tersedia. Data dipaginasi di browser.</Alert>}
                 <CustomDataTable
                     rows={listData.data}
                     columns={columns}
                     loading={listData.loading}
-                    paginationMode="server"
+                    paginationMode={listData.meta ? 'server' : 'client'}
                     rowCount={listData.meta?.total ?? listData.meta?.total_count ?? listData.meta?.recordsTotal ?? listData.data.length}
                     paginationModel={{ page: filters.page, pageSize: filters.per_page }}
                     onPaginationModelChange={handlePaginationChange}
-                    getRowId={(row) => row.file_id}
+                    getRowId={(row) => fileId(row)}
+                    pageSize={filters.per_page}
                     pageSizeOptions={[10, 25, 50]}
                 />
             </div>

@@ -65,13 +65,25 @@ export default function AdminArchive() {
         } catch (err) {
             const formatted = await formatArsipError(err);
             if ([403, 404].includes(formatted.status)) {
-                setEndpointGap('Endpoint /admin/archive/users unavailable. Admin archive user list tidak bisa dimuat dengan aman.');
+                try {
+                    const roles = filters.role ? [filters.role] : ['mahasiswa', 'dosen'];
+                    const responses = await Promise.all(roles.map((role) => arsipApi.adminTargets({ role, search: filters.search, status: filters.status, per_page: 50 })));
+                    const fallbackUsers = responses.flatMap((response, index) => unwrapList(response, ['targets', 'users']).data.map((user) => ({ ...user, role: user.role || user.owner_role || roles[index] })));
+                    setUsers(fallbackUsers);
+                    setUsersMeta(null);
+                    setEndpointGap('Endpoint /admin/archive/users tidak tersedia. Fallback memakai /admin/targets untuk memilih pengguna; jumlah file mungkin tidak lengkap.');
+                } catch (fallbackErr) {
+                    const fallbackFormatted = await formatArsipError(fallbackErr);
+                    setEndpointGap(`Endpoint /admin/archive/users unavailable dan fallback /admin/targets gagal: ${fallbackFormatted.message}`);
+                    setUsers([]);
+                    setUsersMeta(null);
+                }
             } else {
                 setUsersError(formatted.message);
                 customSwal.toast.error({ message: formatted.message });
+                setUsers([]);
+                setUsersMeta(null);
             }
-            setUsers([]);
-            setUsersMeta(null);
         } finally {
             setUsersLoading(false);
         }
@@ -162,7 +174,7 @@ export default function AdminArchive() {
         { field: 'file_size_bytes', headerName: 'Ukuran', width: 120, renderCell: (params) => bytes(params.row.file_size_bytes ?? params.row.size) },
         { field: 'status', headerName: 'Status', width: 130, renderCell: (params) => <StatusChip status={params.row.status || (params.row.is_current === false ? 'archived' : 'available')} /> },
         { field: 'created_at', headerName: 'Upload', width: 170, renderCell: (params) => dateTime(params.row.created_at ?? params.row.uploaded_at) },
-        { field: 'actions', headerName: 'Aksi', width: 120, sortable: false, renderCell: (params) => <Button size="small" disabled={!fileId(params.row)} onClick={() => download(params.row)} sx={buttonSx}><DownloadOutlined sx={{ fontSize: 16 }} /></Button> },
+        { field: 'actions', headerName: 'Aksi', width: 120, sortable: false, renderCell: (params) => <Button size="small" aria-label="Download file pengguna" disabled={!fileId(params.row)} onClick={() => download(params.row)} sx={buttonSx}><DownloadOutlined sx={{ fontSize: 16 }} /></Button> },
     ];
 
     return (

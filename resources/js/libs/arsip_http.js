@@ -10,6 +10,7 @@ const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribut
 
 const client = axios.create({
     baseURL: '/arsip-digital/proxy',
+    timeout: 30000,
     headers: {
         Accept: 'application/json',
         ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
@@ -204,14 +205,19 @@ export async function downloadBlob(path, filename, options = {}) {
         ...options,
     });
 
-    const url = URL.createObjectURL(response.data);
+    const blob = response.data;
+    if (!(blob instanceof Blob) || blob.size === 0) {
+        throw { response: { status: response.status, data: { message: 'File unduhan kosong atau tidak valid.' } } };
+    }
+
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = filename || 'arsip-digital-download';
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 
     return { success: true, data: null, message: null };
 }

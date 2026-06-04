@@ -21,9 +21,17 @@ export default function CustomDataTable({
     paginationModel,
     onPaginationModelChange,
     getRowId,
+    minHeight = 360,
+    maxHeight = 720,
     sx,
     ...props
 }) {
+    const visibleRows = paginationMode === 'server'
+        ? paginationModel?.pageSize || pageSize
+        : Math.min(rows.length || pageSize, pageSize);
+    const tableHeight = rows.length
+        ? Math.min(maxHeight, Math.max(minHeight, 120 + visibleRows * 44))
+        : minHeight;
     const paginationProps = paginationMode === 'server'
         ? {
             paginationMode: 'server',
@@ -38,18 +46,18 @@ export default function CustomDataTable({
         };
 
     return (
-        <Box sx={{ width: '100%', ...sx }}>
+        <Box sx={{ width: '100%', height: tableHeight, minHeight, overflowX: 'auto', ...sx }}>
             <DataGrid
                 rows={rows}
                 columns={columns}
                 loading={loading}
                 pageSizeOptions={pageSizeOptions}
                 disableRowSelectionOnClick
-                autoHeight
                 density="compact"
                 getRowId={getRowId}
                 localeText={defaultLocaleText}
                 sx={{
+                    minWidth: { xs: 720, md: 'auto' },
                     border: 'none',
                     fontFamily: 'Plus Jakarta Sans, sans-serif',
                     fontSize: '0.75rem',

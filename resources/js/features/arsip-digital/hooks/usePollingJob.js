@@ -55,7 +55,8 @@ export function usePollingJob({
     }, []);
 
     const poll = useCallback(async () => {
-        if (!isMountedRef.current || !jobId || isPollingRef.current) return;
+        const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+        if (!isMountedRef.current || !jobId || isPollingRef.current || isHidden) return;
 
         const currentMaxDurationMs = maxDurationMsRef.current;
         if (currentMaxDurationMs && startTimeRef.current) {
