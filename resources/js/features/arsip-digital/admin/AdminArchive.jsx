@@ -178,7 +178,16 @@ export default function AdminArchive() {
             {endpointGap && <Alert severity="warning" sx={{ mb: 2, borderRadius: '0.5rem' }}>{endpointGap}</Alert>}
             {usersError && <Alert severity="error" sx={{ mb: 2, borderRadius: '0.5rem' }}>{usersError}</Alert>}
             <section className="bg-white rounded-lg border border-zinc-200 p-4 mb-4 flex flex-wrap gap-3">
-                <TextField size="small" label="Cari" value={filters.search} onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))} sx={{ minWidth: 220 }} />
+                <TextField
+                    size="small"
+                    label="Cari NIM/NIDN/Nama"
+                    value={filters.search}
+                    onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))}
+                    onKeyDown={(event) => {
+                        if (event.key === 'Enter') loadUsers();
+                    }}
+                    sx={{ minWidth: 260 }}
+                />
                 <TextField size="small" select label="Role" value={filters.role} onChange={(event) => setFilters((prev) => ({ ...prev, role: event.target.value }))} sx={{ minWidth: 150 }}>
                     <MenuItem value="">Semua</MenuItem><MenuItem value="mahasiswa">Mahasiswa</MenuItem><MenuItem value="dosen">Dosen</MenuItem>
                 </TextField>
@@ -188,7 +197,15 @@ export default function AdminArchive() {
                 <Button variant="contained" startIcon={<SearchOutlined />} onClick={loadUsers} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Terapkan Filter</Button>
             </section>
             <section className="bg-white rounded-lg border border-zinc-200 mb-4">
-                <CustomDataTable rows={users} columns={userColumns} loading={usersLoading} getRowId={(row) => userId(row)} pageSize={25} pageSizeOptions={[25, 50]} />
+                <CustomDataTable
+                    rows={users}
+                    columns={userColumns}
+                    loading={usersLoading}
+                    getRowId={(row) => userId(row)}
+                    pageSize={25}
+                    pageSizeOptions={[25, 50]}
+                    toolbar={{ search: false, column: true, density: true }}
+                />
             </section>
             <section className="bg-white rounded-lg border border-zinc-200 p-4">
                 <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
