@@ -35,6 +35,10 @@ const initialFilters = {
 const safeUploadSettings = {
     default_max_file_size_mb: 10,
     default_allowed_extensions: [],
+    personal_quota_bytes: null,
+    personal_used_bytes: 0,
+    personal_remaining_bytes: null,
+    personal_usage_percent: null,
 };
 
 function unwrapListResponse(response, key) {
@@ -111,16 +115,14 @@ export default function PersonalArchive() {
 
     const fetchSettings = async () => {
         try {
-            const res = await arsipApi.settings();
+            const res = await arsipApi.summary();
             setSettings({ ...safeUploadSettings, ...(res.data || res) });
             setSettingsFallback(false);
         } catch (err) {
             const formatted = await formatArsipError(err);
             setSettings(safeUploadSettings);
             setSettingsFallback(true);
-            if (formatted.status !== 403) {
-                customSwal.toast.error({ message: formatted.message });
-            }
+            customSwal.toast.error({ message: formatted.message });
         }
     };
 
@@ -157,8 +159,9 @@ export default function PersonalArchive() {
             callback: async () => {
                 try {
                     await arsipApi.deleteFile(fileId(file), 'Dihapus oleh pengguna');
-                    customSwal.toast.success({ message: 'File berhasil dihapus' });
+                    customSwal.toast.success({ message: 'File berhasil dihapus permanen' });
                     fetchFiles();
+                    fetchSettings();
                 } catch (err) {
                     const formatted = await formatArsipError(err);
                     customSwal.toast.error({ message: formatted.message });
@@ -180,12 +183,20 @@ export default function PersonalArchive() {
 
     const uploadMaxFileSizeMb = Number(settings?.default_max_file_size_mb || safeUploadSettings.default_max_file_size_mb);
     const uploadAllowedExtensions = normalizeExtensions(settings?.default_allowed_extensions);
+    const quotaUsedBytes = Number(settings?.personal_used_bytes || 0);
+    const quotaBytes = settings?.personal_quota_bytes ?? null;
+    const quotaRemainingBytes = settings?.personal_remaining_bytes ?? null;
+    const quotaPercent = Math.min(100, Number(settings?.personal_usage_percent || 0));
+    const quotaFull = quotaRemainingBytes !== null && quotaRemainingBytes <= 0;
 
     const validateFile = (file) => {
         if (!file) return 'Pilih file terlebih dahulu';
         const maxBytes = uploadMaxFileSizeMb * 1024 * 1024;
         if (file.size > maxBytes) {
             return `Ukuran file melebihi batas maksimum (${uploadMaxFileSizeMb} MB)`;
+        }
+        if (quotaRemainingBytes !== null && file.size > quotaRemainingBytes) {
+            return `Sisa kuota arsip pribadi tidak cukup. Sisa kuota: ${bytes(quotaRemainingBytes)}.`;
         }
         if (uploadAllowedExtensions.length) {
             const fileExt = file.name.split('.').pop().toLowerCase();
@@ -242,6 +253,7 @@ export default function PersonalArchive() {
             customSwal.toast.success({ message: 'File berhasil diunggah' });
             handleUploadClose();
             fetchFiles();
+            fetchSettings();
         } catch (err) {
             const formatted = await formatArsipError(err);
             setUploadError(formatted.message);
@@ -344,12 +356,36 @@ export default function PersonalArchive() {
                         size="small"
                         startIcon={<CloudUploadOutlined />}
                         onClick={handleUploadOpen}
+                        disabled={quotaFull}
                         sx={{ textTransform: 'none', borderRadius: '0.5rem' }}
                     >
                         Upload File
                     </Button>
                 }
             />
+
+            <div className="bg-white rounded-lg border border-zinc-200 p-4 mb-4">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div>
+                        <p className="text-sm font-semibold text-zinc-800">Kuota Arsip Pribadi</p>
+                        <p className="text-xs text-zinc-500">
+                            Terpakai {bytes(quotaUsedBytes)} dari {quotaBytes === null ? 'Tidak terbatas' : bytes(quotaBytes)}
+                            {quotaRemainingBytes !== null ? ` · Sisa ${bytes(quotaRemainingBytes)}` : ''}
+                        </p>
+                    </div>
+                    <p className="text-sm font-semibold text-zinc-800">{quotaBytes === null ? '-' : `${quotaPercent}%`}</p>
+                </div>
+                {quotaBytes !== null && (
+                    <div className="mt-3 h-2 rounded-full bg-zinc-100 overflow-hidden">
+                        <div className={`h-full rounded-full ${quotaFull ? 'bg-red-500' : 'bg-blue-600'}`} style={{ width: `${quotaPercent}%` }} />
+                    </div>
+                )}
+                {quotaFull && (
+                    <Alert severity="error" sx={{ mt: 2 }}>
+                        Kuota arsip pribadi Anda sudah penuh. Upload arsip pribadi dinonaktifkan sampai Anda menghapus file.
+                    </Alert>
+                )}
+            </div>
 
             <CustomDataTable
                 rows={listData.data}

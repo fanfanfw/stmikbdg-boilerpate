@@ -22,7 +22,6 @@ import {
     TextField,
 } from '@mui/material';
 import ArrowBackOutlined from '@mui/icons-material/ArrowBackOutlined';
-import CloudUploadOutlined from '@mui/icons-material/CloudUploadOutlined';
 import DownloadOutlined from '@mui/icons-material/DownloadOutlined';
 import RefreshOutlined from '@mui/icons-material/RefreshOutlined';
 
@@ -135,10 +134,6 @@ export default function AdminRequestDetail() {
     const [appendPayload, setAppendPayload] = useState(null);
     const [appendPreview, setAppendPreview] = useState(null);
     const [appendLoading, setAppendLoading] = useState(false);
-    const [uploadOpen, setUploadOpen] = useState(false);
-    const [uploadAssignment, setUploadAssignment] = useState(null);
-    const [selectedFile, setSelectedFile] = useState(null);
-    const [uploadNote, setUploadNote] = useState('');
 
     const filteredAssignments = assignments;
 
@@ -296,43 +291,6 @@ export default function AdminRequestDetail() {
         }
     };
 
-    const openUpload = (assignment) => {
-        setUploadAssignment(assignment);
-        setSelectedFile(null);
-        setUploadNote('');
-        setUploadOpen(true);
-    };
-
-    const closeUpload = () => {
-        setUploadOpen(false);
-        setUploadAssignment(null);
-        setSelectedFile(null);
-        setUploadNote('');
-    };
-
-    const uploadForUser = async () => {
-        if (!selectedFile || !uploadAssignment) return;
-        setActionLoading(true);
-        try {
-            const formData = new FormData();
-            formData.append('file', selectedFile);
-            formData.append('owner_role', uploadAssignment.target_role || request?.target_role || 'mahasiswa');
-            formData.append('owner_identifier', uploadAssignment.identifier);
-            formData.append('request_assignment_id', assignmentId(uploadAssignment));
-            formData.append('display_filename', selectedFile.name);
-            if (uploadNote) formData.append('note', uploadNote);
-            await arsipApi.uploadForUser(formData);
-            customSwal.toast.success({ message: 'File user berhasil diupload admin.' });
-            closeUpload();
-            await refreshAll();
-        } catch (err) {
-            const formatted = await formatArsipError(err);
-            customSwal.toast.error({ message: formatted.message });
-        } finally {
-            setActionLoading(false);
-        }
-    };
-
     const previewAppendTargets = async () => {
         if (!appendPayload) return;
         setAppendLoading(true);
@@ -398,7 +356,6 @@ export default function AdminRequestDetail() {
                     <Button size="small" disabled={actionLoading || files.length < 1} onClick={() => approve(params.row)} sx={buttonSx}>Approve</Button>
                     <Button size="small" color="error" disabled={actionLoading} onClick={() => reject(params.row)} sx={buttonSx}>Reject</Button>
                     {files[0] && <Button size="small" onClick={() => downloadRequestFile(files[0])} sx={buttonSx}><DownloadOutlined sx={{ fontSize: 16 }} /></Button>}
-                    <Button size="small" variant="outlined" disabled={actionLoading || request?.status === 'archived'} onClick={() => openUpload(params.row)} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Upload</Button>
                 </div>
             );
         } },
@@ -516,23 +473,6 @@ export default function AdminRequestDetail() {
                 </DialogActions>
             </Dialog>
 
-            <Dialog open={uploadOpen} onClose={closeUpload} fullWidth maxWidth="sm">
-                <DialogTitle className="!font-jakarta">Upload untuk User</DialogTitle>
-                <DialogContent dividers>
-                    <Alert severity="info" sx={{ mb: 2, borderRadius: '0.5rem' }}>
-                        Target: {uploadAssignment?.identifier || '-'} · {uploadAssignment?.name_snapshot || '-'}
-                    </Alert>
-                    <Button component="label" variant="outlined" startIcon={<CloudUploadOutlined />} fullWidth sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46', py: 2 }}>
-                        {selectedFile ? selectedFile.name : 'Pilih File'}
-                        <input type="file" hidden onChange={(event) => setSelectedFile(event.target.files?.[0] || null)} />
-                    </Button>
-                    <TextField fullWidth size="small" multiline minRows={2} label="Catatan" value={uploadNote} onChange={(event) => setUploadNote(event.target.value)} sx={{ mt: 2 }} />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={closeUpload} sx={buttonSx}>Batal</Button>
-                    <Button variant="contained" disabled={actionLoading || !selectedFile} onClick={uploadForUser} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Upload</Button>
-                </DialogActions>
-            </Dialog>
         </div>
     );
 }

@@ -6,8 +6,7 @@ import { customSwal } from '../../../components/CustomSwal';
 import PageHeader from '../../../components/PageHeader';
 import StatusChip from '../../../components/StatusChip';
 import CustomDataTable from '../../../components/CustomDataTable';
-import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, TextField } from '@mui/material';
-import CloudUploadOutlined from '@mui/icons-material/CloudUploadOutlined';
+import { Alert, Button, MenuItem, TextField } from '@mui/material';
 import DownloadOutlined from '@mui/icons-material/DownloadOutlined';
 import RefreshOutlined from '@mui/icons-material/RefreshOutlined';
 import SearchOutlined from '@mui/icons-material/SearchOutlined';
@@ -48,10 +47,6 @@ export default function AdminArchive() {
     const [filesMeta, setFilesMeta] = useState(null);
     const [filesLoading, setFilesLoading] = useState(false);
     const [filesGap, setFilesGap] = useState('');
-    const [uploadOpen, setUploadOpen] = useState(false);
-    const [uploadFile, setUploadFile] = useState(null);
-    const [uploadNote, setUploadNote] = useState('');
-    const [saving, setSaving] = useState(false);
 
     const loadUsers = async () => {
         setUsersLoading(true);
@@ -112,36 +107,6 @@ export default function AdminArchive() {
         setSelectedUser(user);
         setFiles([]);
         await loadFiles(user);
-    };
-
-    const closeUpload = () => {
-        setUploadOpen(false);
-        setUploadFile(null);
-        setUploadNote('');
-    };
-
-    const uploadForUser = async () => {
-        if (!selectedUser || !uploadFile) return;
-        setSaving(true);
-        try {
-            const identifier = identifierOf(selectedUser);
-            const formData = new FormData();
-            formData.append('file', uploadFile);
-            formData.append('display_filename', uploadFile.name);
-            if (selectedUser.role || selectedUser.owner_role) formData.append('owner_role', selectedUser.role || selectedUser.owner_role);
-            if (identifier) formData.append('owner_identifier', identifier);
-            if (selectedUser.user_id ?? selectedUser.id) formData.append('user_id', selectedUser.user_id ?? selectedUser.id);
-            if (uploadNote) formData.append('note', uploadNote);
-            await arsipApi.uploadForUser(formData);
-            customSwal.toast.success({ message: 'File berhasil diupload untuk pengguna.' });
-            closeUpload();
-            await loadFiles();
-        } catch (err) {
-            const formatted = await formatArsipError(err);
-            customSwal.toast.error({ message: formatted.message });
-        } finally {
-            setSaving(false);
-        }
     };
 
     const download = async (file) => {
@@ -210,20 +175,11 @@ export default function AdminArchive() {
             <section className="bg-white rounded-lg border border-zinc-200 p-4">
                 <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
                     <div><h2 className="text-sm font-semibold text-zinc-800">File Pengguna</h2><p className="text-xs text-zinc-500">{selectedUser ? `${identifierOf(selectedUser) || '-'} · ${nameOf(selectedUser)}` : 'Pilih pengguna untuk melihat file.'}</p></div>
-                    <div className="flex gap-2"><Button variant="outlined" disabled={!selectedUser || filesLoading} onClick={() => loadFiles()} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Muat File</Button><Button variant="contained" startIcon={<CloudUploadOutlined />} disabled={!selectedUser} onClick={() => setUploadOpen(true)} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Upload</Button></div>
+                    <div className="flex gap-2"><Button variant="outlined" disabled={!selectedUser || filesLoading} onClick={() => loadFiles()} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Muat File</Button></div>
                 </div>
                 {filesGap && <Alert severity="warning" sx={{ mb: 2, borderRadius: '0.5rem' }}>{filesGap}</Alert>}
                 <CustomDataTable rows={files} columns={fileColumns} loading={filesLoading} getRowId={(row) => fileId(row)} pageSize={25} pageSizeOptions={[25, 50]} />
             </section>
-            <Dialog open={uploadOpen} onClose={closeUpload} fullWidth maxWidth="sm">
-                <DialogTitle className="!font-jakarta">Upload untuk Pengguna</DialogTitle>
-                <DialogContent dividers>
-                    <Alert severity="info" sx={{ mb: 2, borderRadius: '0.5rem' }}>Target: {identifierOf(selectedUser) || '-'} · {nameOf(selectedUser)}</Alert>
-                    <Button component="label" variant="outlined" fullWidth startIcon={<CloudUploadOutlined />} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46', py: 2 }}>{uploadFile ? uploadFile.name : 'Pilih File'}<input type="file" hidden onChange={(event) => setUploadFile(event.target.files?.[0] || null)} /></Button>
-                    <TextField fullWidth size="small" multiline minRows={2} label="Catatan" value={uploadNote} onChange={(event) => setUploadNote(event.target.value)} sx={{ mt: 2 }} />
-                </DialogContent>
-                <DialogActions><Button onClick={closeUpload} sx={buttonSx}>Batal</Button><Button variant="contained" disabled={saving || !uploadFile} onClick={uploadForUser} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Upload</Button></DialogActions>
-            </Dialog>
         </div>
     );
 }

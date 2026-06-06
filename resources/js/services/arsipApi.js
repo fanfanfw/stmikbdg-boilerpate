@@ -16,7 +16,6 @@ export const arsipApi = {
     downloadFile: (file) => download(`/files/${file.file_id}/download`, file.display_filename || file.original_filename),
     deleteFile: (id, reason) => destroy(`/files/${id}`, { reason }),
     restoreFile: (id) => post(`/files/${id}/restore`),
-    uploadForUser: (formData) => upload('/admin/files/upload-for-user', formData),
 
     adminRequests: (params) => get('/admin/requests', params),
     adminTargets: (params) => get('/admin/targets', params),

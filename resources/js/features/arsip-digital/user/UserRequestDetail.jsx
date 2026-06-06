@@ -133,7 +133,7 @@ export default function UserRequestDetail() {
 
     const fetchFallbackSettings = async () => {
         try {
-            const response = await arsipApi.settings();
+            const response = await arsipApi.summary();
             setFallbackSettings({ ...safeUploadSettings, ...(response.data || response) });
             setFallbackSettingsUnavailable(false);
         } catch (err) {
@@ -383,7 +383,7 @@ export default function UserRequestDetail() {
                     </Button>
                     <p className="text-xs text-zinc-500 mt-2">
                         Maks. {maxFileSizeMb || '-'} MB · Ekstensi: {allowedExtensions.length ? allowedExtensions.join(', ') : 'Semua ekstensi'}
-                        {fallbackSettingsUnavailable ? ' · Memakai batas aman karena pengaturan server tidak tersedia' : ''}
+                        {fallbackSettingsUnavailable ? ' · Memakai batas aman karena aturan default tidak tersedia' : ''}
                     </p>
                 </DialogContent>
                 <DialogActions>

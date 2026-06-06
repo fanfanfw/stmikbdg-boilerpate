@@ -40,7 +40,6 @@ export const arsipApi = {
     },
     deleteFile: (id, reason) => deleteJson(`/files/${id}`, { reason }),
     restoreFile: (id) => postJson(`/files/${id}/restore`),
-    uploadForUser: (formData) => uploadFormData('/admin/files/upload-for-user', formData),
 
     // Admin Requests
     adminRequests: (params) => getJson('/admin/requests', params),
