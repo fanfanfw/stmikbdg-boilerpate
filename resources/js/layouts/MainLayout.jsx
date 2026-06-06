@@ -9,6 +9,7 @@ import {
     DescriptionOutlined,
     LocalShippingOutlined,
     HistoryOutlined,
+    SettingsOutlined,
     MenuOutlined,
     LogoutOutlined,
     PersonOutlined,
@@ -27,6 +28,7 @@ const adminMenuItems = [
     { label: 'Permintaan Berkas', path: '/home/permintaan', icon: DescriptionOutlined },
     { label: 'Distribusi Berkas', path: '/home/distribusi', icon: LocalShippingOutlined },
     { label: 'Audit Log', path: '/home/audit', icon: HistoryOutlined },
+    { label: 'Pengaturan', path: '/home/pengaturan', icon: SettingsOutlined },
 ];
 
 function Footer() {
