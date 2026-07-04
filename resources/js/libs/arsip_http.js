@@ -123,6 +123,16 @@ export async function formatArsipError(error) {
         };
     }
 
+    // 413 - Upload too large for PHP/web server limits
+    if (status === 413) {
+        return {
+            success: false,
+            message: 'Ukuran file melebihi batas server. Naikkan post_max_size/upload_max_filesize di PHP atau kecilkan batas upload aplikasi.',
+            errors: null,
+            status: 413,
+        };
+    }
+
     // 500 - Server error
     if (status === 500) {
         return {
