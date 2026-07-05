@@ -51,7 +51,7 @@ export function normalizeArsipResponse(response) {
     }
 
     // Some endpoints return data directly without wrapper
-    if (raw && !raw.status && !raw.success && !raw.message && !raw.errors) {
+    if (raw && raw.status === undefined && raw.success === undefined && !raw.message && !raw.errors) {
         return {
             success: true,
             data: raw.data ?? raw,
@@ -59,11 +59,14 @@ export function normalizeArsipResponse(response) {
         };
     }
 
-    return {
-        success: false,
-        message: raw?.message || 'Permintaan gagal.',
-        errors: raw?.errors || null,
-        status: response.status,
+    throw {
+        response: {
+            status: response.status,
+            data: {
+                message: raw?.message || 'Permintaan gagal.',
+                errors: raw?.errors || null,
+            },
+        },
     };
 }
 

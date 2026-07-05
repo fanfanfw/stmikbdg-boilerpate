@@ -49,10 +49,9 @@ export default function UserRequests() {
         } catch (err) {
             const formatted = await formatArsipError(err);
             setListData((prev) => ({ ...prev, loading: false, error: formatted.message }));
-            customSwal.fire({
-                icon: 'error',
+            customSwal.toast.error({
                 title: 'Gagal memuat data',
-                text: formatted.message,
+                message: formatted.message,
             });
         }
     };

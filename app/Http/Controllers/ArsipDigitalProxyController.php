@@ -42,7 +42,7 @@ class ArsipDigitalProxyController extends Controller
             ])
             ->timeout(60);
 
-        $response = $request->hasFile('file')
+        $response = $request->allFiles() !== []
             ? $this->sendMultipart($client, $request, $targetUrl)
             : $this->sendRegular($client, $request, $targetUrl);
 

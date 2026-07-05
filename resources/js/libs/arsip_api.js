@@ -11,6 +11,10 @@ import {
 // Arsip Digital API - Ported from services/arsipApi.js using new HTTP helpers
 // --------------------------------------------------------------------------
 
+function missingFileId() {
+    throw { response: { data: { message: 'ID file tidak tersedia.' } } };
+}
+
 export const arsipApi = {
     // Summary & Settings
     summary: () => getJson('/me/archive-summary'),
@@ -30,7 +34,7 @@ export const arsipApi = {
     downloadFile: (file) => {
         const fileId = file?.file_id ?? file?.id;
         if (fileId == null) {
-            return { success: false, message: 'ID file tidak tersedia.' };
+            missingFileId();
         }
 
         return downloadBlob(
@@ -66,7 +70,7 @@ export const arsipApi = {
     downloadRequestFile: (requestFile) => {
         const requestFileId = requestFile?.request_file_id ?? requestFile?.id ?? requestFile?.file_id;
         if (requestFileId == null) {
-            return { success: false, message: 'ID file tidak tersedia.' };
+            missingFileId();
         }
 
         return downloadBlob(
@@ -123,7 +127,7 @@ export const arsipApi = {
     downloadDistributionFile: (file) => {
         const fileId = file?.file_id ?? file?.id ?? file?.distribution_file_id;
         if (fileId == null) {
-            return { success: false, message: 'ID file tidak tersedia.' };
+            missingFileId();
         }
 
         return downloadBlob(
@@ -139,7 +143,7 @@ export const arsipApi = {
     downloadExportJob: (job) => {
         const jobId = job?.export_job_id ?? job?.id;
         if (jobId == null) {
-            return { success: false, message: 'ID file tidak tersedia.' };
+            missingFileId();
         }
 
         return downloadBlob(
@@ -150,13 +154,4 @@ export const arsipApi = {
 
     // Audit Logs
     auditLogs: (params) => getJson('/admin/audit-logs', params),
-
-    // Segments (future use)
-    segments: (params) => getJson('/admin/segments', params),
-    createSegment: (payload) => postJson('/admin/segments', payload),
-    updateSegment: (id, payload) => putJson(`/admin/segments/${id}`, payload),
-    deleteSegment: (id) => deleteJson(`/admin/segments/${id}`),
-    segmentMembers: (id, params) => getJson(`/admin/segments/${id}/members`, params),
-    importSegmentMembers: (id, payload) =>
-        postJson(`/admin/segments/${id}/members/import`, payload),
 };

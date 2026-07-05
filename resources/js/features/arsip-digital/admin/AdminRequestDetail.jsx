@@ -128,6 +128,7 @@ export default function AdminRequestDetail() {
     const [assignmentsLoading, setAssignmentsLoading] = useState(false);
     const [error, setError] = useState('');
     const [filters, setFilters] = useState({ search: '', status: '', late: '' });
+    const [assignmentPagination, setAssignmentPagination] = useState({ page: 0, pageSize: 50 });
     const [selectedIds, setSelectedIds] = useState([]);
     const [actionLoading, setActionLoading] = useState(false);
     const [appendOpen, setAppendOpen] = useState(false);
@@ -170,13 +171,15 @@ export default function AdminRequestDetail() {
         }
     };
 
-    const loadAssignments = async () => {
+    const loadAssignments = async (pagination = assignmentPagination) => {
         setAssignmentsLoading(true);
         try {
             const response = await arsipApi.requestAssignments(id, {
                 search: filters.search,
                 status: filters.status,
                 is_late: filters.late === '' ? undefined : filters.late === 'late',
+                page: pagination.page + 1,
+                per_page: pagination.pageSize,
             });
             const unwrapped = unwrapAssignments(response);
             setAssignments(unwrapped.data);
@@ -197,6 +200,17 @@ export default function AdminRequestDetail() {
     useEffect(() => {
         refreshAll();
     }, [id]);
+
+    const applyAssignmentFilters = () => {
+        const firstPage = { ...assignmentPagination, page: 0 };
+        setAssignmentPagination(firstPage);
+        loadAssignments(firstPage);
+    };
+
+    const handleAssignmentPaginationChange = (model) => {
+        setAssignmentPagination(model);
+        loadAssignments(model);
+    };
 
     const handleFilterChange = (key, value) => {
         setFilters((prev) => ({ ...prev, [key]: value }));
@@ -441,7 +455,7 @@ export default function AdminRequestDetail() {
                         <MenuItem value="late">Terlambat</MenuItem>
                         <MenuItem value="on_time">Tidak terlambat</MenuItem>
                     </TextField>
-                    <Button variant="outlined" onClick={loadAssignments} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Terapkan</Button>
+                    <Button variant="outlined" onClick={applyAssignmentFilters} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Terapkan</Button>
                 </div>
 
 
@@ -451,7 +465,11 @@ export default function AdminRequestDetail() {
                     loading={assignmentsLoading}
                     getRowId={(row) => assignmentId(row)}
                     pageSize={50}
-                    pageSizeOptions={[50]}
+                    pageSizeOptions={[25, 50, 100]}
+                    paginationMode={assignmentsMeta ? 'server' : 'client'}
+                    rowCount={assignmentsMeta?.total ?? filteredAssignments.length}
+                    paginationModel={assignmentPagination}
+                    onPaginationModelChange={handleAssignmentPaginationChange}
                 />
             </section>
 

@@ -60,6 +60,35 @@ class ArsipDigitalProxyTest extends TestCase
             ->assertJsonPath('data.file.file_id', 10);
     }
 
+    public function test_proxy_forwards_multipart_zip_upload(): void
+    {
+        $this->withProxySession(['is_admin' => true]);
+
+        Http::fake(function ($request) {
+            $this->assertSame('POST', $request->method());
+            $this->assertSame('admin', $request->header('X-Active-Role')[0] ?? null);
+            $this->assertStringContainsString('multipart/form-data', $request->header('Content-Type')[0] ?? '');
+            $this->assertStringContainsString('name="zip_file"', $request->body());
+            $this->assertStringContainsString('bulk.zip', $request->body());
+            $this->assertStringContainsString('name="dry_run"', $request->body());
+            $this->assertStringContainsString('1', $request->body());
+
+            return Http::response([
+                'status' => 'success',
+                'data' => ['job_id' => 11],
+            ], 201);
+        });
+
+        $response = $this->withoutMiddleware(hasToken::class)
+            ->post('/arsip-digital/proxy/admin/distributions/bulk-upload', [
+                'dry_run' => '1',
+                'zip_file' => UploadedFile::fake()->createWithContent('bulk.zip', 'PK proxy'),
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.job_id', 11);
+    }
+
     public function test_proxy_preserves_binary_download_headers(): void
     {
         $this->withProxySession(['is_admin' => true]);

@@ -37,7 +37,7 @@ export const customSwal = {
                     timerProgressBar: true,
                     allowOutsideClick: false,
                     allowEscapeKey: false,
-                    didOpen: callback(),
+                    didOpen: () => callback?.(),
                     customClass: {
                         popup: `bg-white rounded-md border-2 border-zinc-700 text-xs sm:text-lg lg:text-xl font-jakarta tracking-tighter italic`,
                         title: `text-blue-500 text-sm sm:text-xl lg:text-2xl font-jakarta`,
@@ -62,7 +62,7 @@ export const customSwal = {
             text: message,
             timer,
             timerProgressBar: true,
-            didOpen: callback(),
+            didOpen: () => callback?.(),
             showConfirmButton: false,
             customClass: {
                 title: `text-green-600 font-semibold font-jakarta`,
@@ -165,7 +165,7 @@ export const customSwal = {
             timerProgressBar: true,
             allowOutsideClick: false,
             allowEscapeKey: false,
-            didOpen: onProcess(),
+            didOpen: () => onProcess?.(),
             customClass: {
                 popup: `bg-white rounded-md border-2 border-zinc-700 text-xs sm:text-lg lg:text-xl font-jakarta tracking-tighter italic`,
                 title: `text-blue-500 text-sm sm:text-xl lg:text-2xl font-jakarta`,

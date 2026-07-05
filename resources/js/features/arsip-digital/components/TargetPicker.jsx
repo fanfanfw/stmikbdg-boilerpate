@@ -58,7 +58,7 @@ function normalizeInitialFilters(value, role) {
         ...defaultFilters,
         angkatan: role === 'mahasiswa' ? csv(targetFilters.angkatan).join(', ') : '',
         status: studentStatus.join(', '),
-        has_account: targetFilters.has_account === false ? '0' : targetFilters.has_account === true ? '1' : '',
+        has_account: targetFilters.has_account === true ? '1' : '',
     };
 }
 
@@ -76,7 +76,6 @@ function buildPayload(role, mode, filters, selectedIdentifiers) {
         if (role === 'mahasiswa' && angkatan.length) targetFilters.angkatan = angkatan;
         if (status.length) targetFilters.student_status = status;
         if (filters.has_account === '1') targetFilters.has_account = true;
-        if (filters.has_account === '0') targetFilters.has_account = false;
     }
 
     return {
@@ -260,7 +259,6 @@ export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa
                 <TextField size="small" select label="Akun" value={filters.has_account} disabled={disabled} onChange={(event) => handleFilterChange('has_account', event.target.value)}>
                     <MenuItem value="">Semua</MenuItem>
                     <MenuItem value="1">Punya akun</MenuItem>
-                    <MenuItem value="0">Belum punya akun</MenuItem>
                 </TextField>
                 <Button variant="contained" disabled={disabled || state.loading} onClick={() => loadTargets(1)} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>
                     Terapkan Filter

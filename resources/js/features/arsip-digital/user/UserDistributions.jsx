@@ -61,10 +61,9 @@ export default function UserDistributions() {
             await arsipApi.downloadDistributionFile(file);
         } catch (err) {
             const formatted = await formatArsipError(err);
-            customSwal.fire({
-                icon: 'error',
+            customSwal.toast.error({
                 title: 'Gagal mengunduh',
-                text: formatted.message,
+                message: formatted.message,
             });
         }
     };
