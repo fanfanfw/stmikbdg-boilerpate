@@ -87,7 +87,7 @@ function buildPayload(role, mode, filters, selectedIdentifiers) {
     };
 }
 
-export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa', disabled = false }) {
+export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa', disabled = false, invalidTargets = [] }) {
     const [initialized, setInitialized] = useState(false);
     const roleRef = useRef(initialRole);
 
@@ -118,13 +118,14 @@ export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa
         setError,
         toggleIdentifier,
         clearSelection,
-        selectAllFiltered,
     } = picker;
 
     const role = state.role || initialRole || 'mahasiswa';
     roleRef.current = role;
     const filters = { ...defaultFilters, ...state.filters };
     const selectedIdentifiers = state.selectedIdentifiers;
+    const invalidIdentifiers = new Set((invalidTargets || []).map((target) => String(target.identifier || '').trim()).filter(Boolean));
+    const invalidReasonByIdentifier = Object.fromEntries((invalidTargets || []).map((target) => [String(target.identifier || '').trim(), target.reason || 'Target invalid.']));
     const currentPage = Number(state.targetMeta?.current_page ?? filters.page ?? 1);
     const lastPage = Number(state.targetMeta?.last_page ?? 1);
     const hasTargetMeta = Boolean(state.targetMeta);
@@ -157,6 +158,12 @@ export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa
         if (!initialized) return;
         onChange?.(payload);
     }, [initialized, onChange, payload]);
+
+    useEffect(() => {
+        if (!initialized || value?.scope_type !== 'specific' || !Array.isArray(value?.target_identifiers)) return;
+        const next = value.target_identifiers.map(String);
+        if (JSON.stringify(next) !== JSON.stringify(selectedIdentifiers)) dispatch({ type: 'SELECT_ALL_FILTERED', payload: next });
+    }, [dispatch, initialized, selectedIdentifiers, value?.scope_type, value?.target_identifiers]);
 
     const loadTargets = async (page = 1) => {
         setLoading(true);
@@ -211,14 +218,14 @@ export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa
     };
 
     const handleClearSelection = () => {
+        setMode('specific');
         clearSelection();
-        setMode('filter');
     };
 
-    const handleSelectAllFiltered = async () => {
+    const handleSelectAllFiltered = () => {
         if (!canSelectAllFiltered) return;
-        setMode('specific');
-        await selectAllFiltered({ filters, targets: state.targets, meta: state.targetMeta, expectedQueryKey: currentQueryKey });
+        setMode('filter');
+        clearSelection();
     };
 
     return (
@@ -272,8 +279,8 @@ export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa
             <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
                 <div className="text-xs text-zinc-500">Payload aktif: <strong className="text-zinc-700">{payload.scope_type}</strong> · {payload.target_role}</div>
                 <div className="flex flex-wrap gap-2">
-                    <Button size="small" variant="outlined" disabled={disabled || state.loading || state.selectingAllFiltered || total < 1 || !canSelectAllFiltered} onClick={handleSelectAllFiltered} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>
-                        {state.selectingAllFiltered ? 'Memilih...' : hasTargetMeta ? `Pilih semua hasil filter (${total})` : `Pilih semua hasil dimuat (${state.targets.length})`}
+                    <Button size="small" variant="outlined" disabled={disabled || state.loading || total < 1 || !canSelectAllFiltered} onClick={handleSelectAllFiltered} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>
+                        {hasTargetMeta ? `Gunakan filter ini (${total})` : `Gunakan hasil dimuat (${state.targets.length})`}
                     </Button>
                     <Button size="small" variant="outlined" disabled={disabled || selectablePageIdentifiers.length < 1} onClick={() => togglePage(true)} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>
                         Pilih halaman ini
@@ -300,12 +307,12 @@ export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa
                         {state.targets.map((target) => {
                             const identifier = normalizeIdentifier(target);
                             return (
-                                <tr key={identifier} className={selectedIdentifiers.includes(identifier) ? 'bg-blue-50' : 'bg-white'}>
+                                <tr key={identifier} className={invalidIdentifiers.has(identifier) ? 'bg-red-50' : selectedIdentifiers.includes(identifier) ? 'bg-blue-50' : 'bg-white'}>
                                     <td className="px-3 py-2"><Checkbox size="small" checked={selectedIdentifiers.includes(identifier)} disabled={disabled} onChange={() => handleToggleIdentifier(identifier)} /></td>
                                     <td className="px-3 py-2 font-semibold text-zinc-800">{identifier || '-'}</td>
                                     <td className="px-3 py-2 text-zinc-700">{target.name || target.name_snapshot || '-'}</td>
                                     {role === 'mahasiswa' && <td className="px-3 py-2 text-zinc-700">{target.angkatan || target.angkatan_snapshot || '-'}</td>}
-                                    <td className="px-3 py-2 text-zinc-700">{target.status || target.status_snapshot || '-'}</td>
+                                    <td className="px-3 py-2 text-zinc-700">{invalidIdentifiers.has(identifier) ? invalidReasonByIdentifier[identifier] : target.status || target.status_snapshot || '-'}</td>
                                     <td className="px-3 py-2 text-zinc-700">{target.has_account === false ? 'Tidak' : 'Ya'}</td>
                                 </tr>
                             );

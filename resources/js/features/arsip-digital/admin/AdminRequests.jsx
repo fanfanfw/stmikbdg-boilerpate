@@ -99,6 +99,8 @@ function canSubmitTarget(payload) {
     return true;
 }
 
+const emptyPreview = { total_valid: 0, total_invalid: 0, total_targets: 0, valid_targets: [], invalid_targets: [] };
+
 async function confirmAction(title, text, confirmButtonText = 'Ya') {
     const result = await Swal.fire({
         title,
@@ -189,7 +191,7 @@ export default function AdminRequests() {
 
     const handlePreview = async () => {
         if (!canSubmitTarget(targetPayload)) {
-            customSwal.toast.error({ message: 'Pilih target terlebih dahulu.' });
+            setPreview(emptyPreview);
             return;
         }
         setPreviewLoading(true);
@@ -202,6 +204,24 @@ export default function AdminRequests() {
         } finally {
             setPreviewLoading(false);
         }
+    };
+
+    const removeTargetIdentifier = (identifier) => {
+        const nextIdentifiers = (targetPayload?.target_identifiers || []).filter((item) => String(item) !== String(identifier));
+        setTargetPayload({ ...targetPayload, scope_type: 'specific', target_identifiers: nextIdentifiers });
+        setPreview((current) => {
+            if (!current) return current;
+            const validTargets = (current.valid_targets || []).filter((target) => String(target.identifier) !== String(identifier));
+            const invalidTargets = (current.invalid_targets || []).filter((target) => String(target.identifier) !== String(identifier));
+            return {
+                ...current,
+                total_valid: validTargets.length,
+                total_invalid: invalidTargets.length,
+                total_targets: validTargets.length + invalidTargets.length,
+                valid_targets: validTargets,
+                invalid_targets: invalidTargets,
+            };
+        });
     };
 
     const handleSubmit = async () => {
@@ -244,6 +264,13 @@ export default function AdminRequests() {
             customSwal.toast.error({ message: formatted.message });
         }
     };
+
+    const previewTargets = preview ? [
+        ...(preview.invalid_targets || []).map((target) => ({ ...target, valid: false })),
+        ...(preview.valid_targets || []).map((target) => ({ ...target, valid: true })),
+    ] : [];
+    const visiblePreviewTargets = previewTargets.slice(0, 200);
+    const canRemovePreviewTarget = targetPayload?.scope_type === 'specific';
 
     const deleteRequest = async (request) => {
         if (!(await confirmAction('Hapus request?', 'Request akan dihapus permanen.', 'Hapus'))) return;
@@ -349,7 +376,7 @@ export default function AdminRequests() {
                         <label><input type="checkbox" checked={form.close_after_deadline} onChange={(event) => setForm((prev) => ({ ...prev, close_after_deadline: event.target.checked }))} /> Tutup setelah deadline</label>
                     </div>
 
-                    <TargetPicker value={targetPayload} onChange={setTargetPayload} initialRole={targetPayload?.target_role || 'mahasiswa'} />
+                    <TargetPicker value={targetPayload} onChange={setTargetPayload} initialRole={targetPayload?.target_role || 'mahasiswa'} invalidTargets={preview?.invalid_targets || []} />
 
                     <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 flex items-center justify-between gap-3 flex-wrap">
                         <div className="text-xs text-zinc-600">
@@ -358,6 +385,21 @@ export default function AdminRequests() {
                         </div>
                         <Button variant="outlined" disabled={previewLoading} onClick={handlePreview} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>{previewLoading ? 'Memvalidasi...' : 'Preview Target'}</Button>
                     </div>
+
+                    {previewTargets.length > 0 && (
+                        <div className="rounded-lg border border-zinc-200 bg-white p-3 text-xs text-zinc-700">
+                            <strong>Daftar preview target</strong>
+                            {previewTargets.length > visiblePreviewTargets.length && <p className="mt-1 text-zinc-500">Menampilkan {visiblePreviewTargets.length} dari {previewTargets.length} target.</p>}
+                            <div className="mt-2 max-h-48 overflow-y-auto divide-y divide-zinc-100">
+                                {visiblePreviewTargets.map((target) => (
+                                    <div key={`${target.valid ? 'valid' : 'invalid'}-${target.identifier}`} className={`flex items-center justify-between gap-3 py-2 ${target.valid ? '' : 'text-red-700'}`}>
+                                        <span><b>{target.identifier}</b> · {target.name_snapshot || target.name || target.reason || 'Valid'}</span>
+                                        {canRemovePreviewTarget && <Button size="small" color="error" onClick={() => removeTargetIdentifier(target.identifier)} sx={buttonSx}>Batalkan</Button>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDialogOpen(false)} sx={buttonSx}>Batal</Button>
