@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { arsipApi } from '../../../libs/arsip_api';
 import { formatArsipError } from '../../../libs/arsip_http';
 import { dateTime, bytes } from '../../../libs/format';
@@ -17,12 +17,16 @@ import {
     IconButton,
     Alert,
     Tooltip,
+    Checkbox,
 } from '@mui/material';
 import {
     CloudUploadOutlined,
     DownloadOutlined,
     DeleteOutlined,
     RestoreOutlined,
+    FolderOutlined,
+    InsertDriveFileOutlined,
+    ArrowBackOutlined,
 } from '@mui/icons-material';
 
 const initialFilters = {
@@ -52,6 +56,10 @@ function unwrapListResponse(response, key) {
 
 function fileId(file) {
     return file?.file_id ?? file?.id;
+}
+
+function categoryId(category) {
+    return category?.category_id ?? category?.id;
 }
 
 function normalizeExtensions(value) {
@@ -87,6 +95,8 @@ export default function PersonalArchive() {
     const [categoryForm, setCategoryForm] = useState({ name: '', description: '' });
     const [categoryError, setCategoryError] = useState('');
     const [creatingCategory, setCreatingCategory] = useState(false);
+    const [activeCategoryId, setActiveCategoryId] = useState('');
+    const [selectedFileIds, setSelectedFileIds] = useState([]);
 
     const fetchFiles = useCallback(async () => {
         setListData((prev) => ({ ...prev, loading: true }));
@@ -96,10 +106,10 @@ export default function PersonalArchive() {
                 per_page: filters.per_page,
             };
             if (filters.search) params.search = filters.search;
-            if (filters.category_id) params.category_id = filters.category_id;
             const res = await arsipApi.files(params);
             const unwrapped = unwrapListResponse(res, 'files');
             setListData({ data: unwrapped.data, meta: unwrapped.meta, loading: false });
+            setSelectedFileIds([]);
         } catch (err) {
             const formatted = await formatArsipError(err);
             customSwal.toast.error({ message: formatted.message });
@@ -188,6 +198,66 @@ export default function PersonalArchive() {
         }
     };
 
+    const openFolder = (category) => {
+        setActiveCategoryId(categoryId(category));
+        setSelectedFileIds([]);
+    };
+
+    const closeFolder = () => {
+        setActiveCategoryId('');
+        setSelectedFileIds([]);
+    };
+
+    const handleDeleteCategory = (category) => {
+        if (category.files_count > 0) return;
+        customSwal.question({
+            title: 'Hapus kategori?',
+            message: `Kategori "${category.name}" akan dihapus.`,
+            callback: async () => {
+                try {
+                    await arsipApi.deleteCategory(categoryId(category));
+                    customSwal.toast.success({ message: 'Kategori berhasil dihapus' });
+                    fetchCategories();
+                } catch (err) {
+                    const formatted = await formatArsipError(err);
+                    customSwal.toast.error({ message: formatted.message });
+                }
+            },
+        });
+    };
+
+    const toggleFileSelection = (file) => {
+        const id = fileId(file);
+        setSelectedFileIds((prev) => prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]);
+    };
+
+    const toggleAllVisibleFiles = (checked) => {
+        setSelectedFileIds(checked ? visibleFiles.map(fileId).filter(Boolean) : []);
+    };
+
+    const bulkDownload = async () => {
+        for (const file of selectedFiles) {
+            await handleDownload(file);
+        }
+    };
+
+    const bulkDelete = () => {
+        if (!selectedFiles.length) return;
+        customSwal.question({
+            title: 'Hapus file terpilih?',
+            message: `${selectedFiles.length} file akan dihapus.`,
+            callback: async () => {
+                for (const file of selectedFiles) {
+                    await arsipApi.deleteFile(fileId(file), 'Dihapus bulk oleh pengguna');
+                }
+                customSwal.toast.success({ message: 'File terpilih berhasil dihapus' });
+                setSelectedFileIds([]);
+                fetchFiles();
+                fetchSettings();
+            },
+        });
+    };
+
     const uploadMaxFileSizeMb = Number(settings?.default_max_file_size_mb || safeUploadSettings.default_max_file_size_mb);
     const uploadAllowedExtensions = normalizeExtensions(settings?.default_allowed_extensions);
     const quotaUsedBytes = Number(settings?.personal_used_bytes || 0);
@@ -195,6 +265,23 @@ export default function PersonalArchive() {
     const quotaRemainingBytes = settings?.personal_remaining_bytes ?? null;
     const quotaPercent = Math.min(100, Number(settings?.personal_usage_percent || 0));
     const quotaFull = quotaRemainingBytes !== null && quotaRemainingBytes <= 0;
+    const activeCategory = categories.find((category) => String(categoryId(category)) === String(activeCategoryId));
+    const visibleFiles = useMemo(() => listData.data.filter((file) => {
+        const currentCategoryId = file.category_id ?? file.category?.category_id ?? file.category?.id ?? '';
+        return activeCategoryId ? String(currentCategoryId) === String(activeCategoryId) : !currentCategoryId;
+    }), [listData.data, activeCategoryId]);
+    const tableRows = activeCategoryId
+        ? visibleFiles.map((file) => ({ ...file, row_type: 'file' }))
+        : [
+            ...categories.map((category) => ({
+                ...category,
+                row_type: 'folder',
+                row_id: `folder-${categoryId(category)}`,
+                files_count: listData.data.filter((file) => String(file.category_id ?? file.category?.category_id ?? file.category?.id ?? '') === String(categoryId(category))).length,
+            })),
+            ...visibleFiles.map((file) => ({ ...file, row_type: 'file' })),
+        ];
+    const selectedFiles = visibleFiles.filter((file) => selectedFileIds.includes(fileId(file)));
 
     const validateFile = (file) => {
         if (!file) return 'Pilih file terlebih dahulu';
@@ -215,7 +302,7 @@ export default function PersonalArchive() {
     };
 
     const handleUploadOpen = () => {
-        setUploadForm({ file: null, category_id: '', display_filename: '' });
+        setUploadForm({ file: null, category_id: activeCategoryId || '', display_filename: '' });
         setUploadError('');
         setUploadOpen(true);
     };
@@ -313,37 +400,63 @@ export default function PersonalArchive() {
 
     const columns = [
         {
-            field: 'display_filename',
-            headerName: 'Nama File',
-            flex: 1,
-            minWidth: 200,
-            renderCell: (params) => (
-                <span className="font-medium text-zinc-800">{params.value}</span>
+            field: 'select',
+            headerName: '',
+            width: 56,
+            sortable: false,
+            filterable: false,
+            renderHeader: () => (
+                <Checkbox
+                    size="small"
+                    disabled={!visibleFiles.length}
+                    checked={visibleFiles.length > 0 && selectedFileIds.length === visibleFiles.length}
+                    indeterminate={selectedFileIds.length > 0 && selectedFileIds.length < visibleFiles.length}
+                    onChange={(event) => toggleAllVisibleFiles(event.target.checked)}
+                />
             ),
+            renderCell: (params) => params.row.row_type === 'file' ? (
+                <Checkbox
+                    size="small"
+                    checked={selectedFileIds.includes(fileId(params.row))}
+                    onChange={() => toggleFileSelection(params.row)}
+                />
+            ) : null,
         },
         {
-            field: 'category',
-            headerName: 'Kategori',
-            width: 150,
-            valueGetter: (value, row) => row.category?.name || '-',
+            field: 'display_filename',
+            headerName: activeCategory ? `Isi ${activeCategory.name}` : 'Nama',
+            flex: 1,
+            minWidth: 220,
+            renderCell: (params) => params.row.row_type === 'folder' ? (
+                <button type="button" className="flex items-center gap-2 font-semibold text-blue-700 hover:underline" onClick={() => openFolder(params.row)}>
+                    <FolderOutlined fontSize="small" />
+                    {params.row.name}
+                    <span className="text-xs font-normal text-zinc-500">({params.row.files_count || 0})</span>
+                </button>
+            ) : (
+                <span className="flex items-center gap-2 font-medium text-zinc-800">
+                    <InsertDriveFileOutlined fontSize="small" />
+                    {params.row.display_filename || params.row.original_filename || params.row.filename || '-'}
+                </span>
+            ),
         },
         {
             field: 'file_size',
             headerName: 'Ukuran',
             width: 100,
-            valueGetter: (value) => bytes(value),
+            renderCell: (params) => params.row.row_type === 'file' ? bytes(params.row.file_size ?? params.row.file_size_bytes ?? params.row.size) : '-',
         },
         {
             field: 'created_at',
             headerName: 'Tanggal Upload',
             width: 170,
-            valueGetter: (value) => dateTime(value),
+            renderCell: (params) => params.row.row_type === 'file' ? dateTime(params.row.created_at) : '-',
         },
         {
             field: 'status',
             headerName: 'Status',
             width: 130,
-            renderCell: (params) => <StatusChip status={params.value} />,
+            renderCell: (params) => params.row.row_type === 'file' ? <StatusChip status={params.row.status} /> : '-',
         },
         {
             field: 'actions',
@@ -351,45 +464,35 @@ export default function PersonalArchive() {
             width: 140,
             sortable: false,
             filterable: false,
-            renderCell: (params) => (
+            renderCell: (params) => params.row.row_type === 'file' ? (
                 <div className="flex items-center gap-1">
                     <Tooltip title="Download">
-                        <IconButton
-                            size="small"
-                            color="primary"
-                            aria-label="Download file"
-                            disabled={!fileId(params.row)}
-                            onClick={() => handleDownload(params.row)}
-                        >
+                        <IconButton size="small" color="primary" aria-label="Download file" disabled={!fileId(params.row)} onClick={() => handleDownload(params.row)}>
                             <DownloadOutlined fontSize="small" />
                         </IconButton>
                     </Tooltip>
                     {params.row.status === 'deleted' ? (
                         <Tooltip title="Pulihkan">
-                            <IconButton
-                                size="small"
-                                color="success"
-                                aria-label="Pulihkan file"
-                                disabled={!fileId(params.row)}
-                                onClick={() => handleRestore(params.row)}
-                            >
+                            <IconButton size="small" color="success" aria-label="Pulihkan file" disabled={!fileId(params.row)} onClick={() => handleRestore(params.row)}>
                                 <RestoreOutlined fontSize="small" />
                             </IconButton>
                         </Tooltip>
                     ) : (
                         <Tooltip title="Hapus">
-                            <IconButton
-                                size="small"
-                                color="error"
-                                aria-label="Hapus file"
-                                disabled={!fileId(params.row)}
-                                onClick={() => handleDelete(params.row)}
-                            >
+                            <IconButton size="small" color="error" aria-label="Hapus file" disabled={!fileId(params.row)} onClick={() => handleDelete(params.row)}>
                                 <DeleteOutlined fontSize="small" />
                             </IconButton>
                         </Tooltip>
                     )}
                 </div>
+            ) : (
+                <Tooltip title={params.row.files_count > 0 ? 'Kategori harus kosong' : 'Hapus kategori'}>
+                    <span>
+                        <IconButton size="small" color="error" disabled={params.row.files_count > 0} onClick={() => handleDeleteCategory(params.row)}>
+                            <DeleteOutlined fontSize="small" />
+                        </IconButton>
+                    </span>
+                </Tooltip>
             ),
         },
     ];
@@ -446,18 +549,35 @@ export default function PersonalArchive() {
                 )}
             </div>
 
-            <CustomDataTable
-                rows={listData.data}
-                columns={columns}
-                loading={listData.loading}
-                paginationMode={listData.meta ? 'server' : 'client'}
-                rowCount={listData.meta?.total ?? listData.meta?.total_count ?? listData.meta?.recordsTotal ?? listData.data.length}
-                paginationModel={{ page: filters.page, pageSize: filters.per_page }}
-                onPaginationModelChange={handlePaginationChange}
-                getRowId={(row) => fileId(row)}
-                pageSize={filters.per_page}
-                pageSizeOptions={[10, 25, 50]}
-            />
+            <div className="bg-white rounded-lg border border-zinc-200 p-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+                    <div className="flex items-center gap-2 text-sm text-zinc-600">
+                        {activeCategory && (
+                            <Button size="small" startIcon={<ArrowBackOutlined />} onClick={closeFolder} sx={{ textTransform: 'none' }}>
+                                Arsip Saya
+                            </Button>
+                        )}
+                        <span className="font-semibold text-zinc-800">{activeCategory ? activeCategory.name : 'Arsip Saya'}</span>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                        <Button size="small" variant="outlined" disabled={!selectedFiles.length} startIcon={<DownloadOutlined />} onClick={bulkDownload} sx={{ textTransform: 'none', borderRadius: '0.5rem' }}>
+                            Download ({selectedFiles.length})
+                        </Button>
+                        <Button size="small" variant="outlined" color="error" disabled={!selectedFiles.length} startIcon={<DeleteOutlined />} onClick={bulkDelete} sx={{ textTransform: 'none', borderRadius: '0.5rem' }}>
+                            Hapus ({selectedFiles.length})
+                        </Button>
+                    </div>
+                </div>
+                <CustomDataTable
+                    rows={tableRows}
+                    columns={columns}
+                    loading={listData.loading}
+                    paginationMode="client"
+                    getRowId={(row) => row.row_type === 'folder' ? row.row_id : fileId(row)}
+                    pageSize={filters.per_page}
+                    pageSizeOptions={[10, 25, 50]}
+                />
+            </div>
 
             {/* Upload Dialog */}
             <Dialog

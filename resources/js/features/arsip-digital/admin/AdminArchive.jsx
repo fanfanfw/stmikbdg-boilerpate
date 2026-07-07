@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { arsipApi } from '../../../libs/arsip_api';
 import { formatArsipError } from '../../../libs/arsip_http';
 import { bytes, dateTime } from '../../../libs/format';
@@ -6,9 +6,13 @@ import { customSwal } from '../../../components/CustomSwal';
 import PageHeader from '../../../components/PageHeader';
 import StatusChip from '../../../components/StatusChip';
 import CustomDataTable from '../../../components/CustomDataTable';
-import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, TextField } from '@mui/material';
+import { Alert, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, TextField } from '@mui/material';
 import CloudUploadOutlined from '@mui/icons-material/CloudUploadOutlined';
 import DownloadOutlined from '@mui/icons-material/DownloadOutlined';
+import DeleteOutlined from '@mui/icons-material/DeleteOutlined';
+import FolderOutlined from '@mui/icons-material/FolderOutlined';
+import InsertDriveFileOutlined from '@mui/icons-material/InsertDriveFileOutlined';
+import ArrowBackOutlined from '@mui/icons-material/ArrowBackOutlined';
 import RefreshOutlined from '@mui/icons-material/RefreshOutlined';
 import SearchOutlined from '@mui/icons-material/SearchOutlined';
 
@@ -72,6 +76,8 @@ export default function AdminArchive() {
     const [uploadForm, setUploadForm] = useState({ file: null, category_id: '', display_filename: '' });
     const [uploadError, setUploadError] = useState('');
     const [uploading, setUploading] = useState(false);
+    const [activeCategoryId, setActiveCategoryId] = useState('');
+    const [selectedFileIds, setSelectedFileIds] = useState([]);
 
     const loadUsers = async () => {
         setUsersLoading(true);
@@ -114,6 +120,7 @@ export default function AdminArchive() {
             const unwrapped = unwrapList(response, ['files']);
             setFiles(unwrapped.data);
             setFilesMeta(unwrapped.meta);
+            setSelectedFileIds([]);
         } catch (err) {
             const formatted = await formatArsipError(err);
             setFilesGap(`Endpoint /files belum mendukung filter arsip pengguna ini: ${formatted.message}`);
@@ -151,8 +158,28 @@ export default function AdminArchive() {
         setSelectedUser(user);
         setFiles([]);
         setCategories([]);
+        setActiveCategoryId('');
+        setSelectedFileIds([]);
         await Promise.all([loadFiles(user), loadCategories(user)]);
     };
+
+    const activeCategory = categories.find((category) => String(categoryId(category)) === String(activeCategoryId));
+    const visibleFiles = useMemo(() => files.filter((file) => {
+        const currentCategoryId = file.category_id ?? file.category?.category_id ?? file.category?.id ?? '';
+        return activeCategoryId ? String(currentCategoryId) === String(activeCategoryId) : !currentCategoryId;
+    }), [files, activeCategoryId]);
+    const tableRows = activeCategoryId
+        ? visibleFiles.map((file) => ({ ...file, row_type: 'file' }))
+        : [
+            ...categories.map((category) => ({
+                ...category,
+                row_type: 'folder',
+                row_id: `folder-${categoryId(category)}`,
+                files_count: files.filter((file) => String(file.category_id ?? file.category?.category_id ?? file.category?.id ?? '') === String(categoryId(category))).length,
+            })),
+            ...visibleFiles.map((file) => ({ ...file, row_type: 'file' })),
+        ];
+    const selectedFiles = visibleFiles.filter((file) => selectedFileIds.includes(fileId(file)));
 
     const openCategoryModal = () => {
         setCategoryForm({ name: '', description: '' });
@@ -202,7 +229,7 @@ export default function AdminArchive() {
     };
 
     const openUploadModal = () => {
-        setUploadForm({ file: null, category_id: '', display_filename: '' });
+        setUploadForm({ file: null, category_id: activeCategoryId || '', display_filename: '' });
         setUploadError('');
         setUploadOpen(true);
         loadCategories();
@@ -256,6 +283,82 @@ export default function AdminArchive() {
         }
     };
 
+    const deleteFile = (file) => {
+        customSwal.question({
+            title: 'Hapus file pengguna?',
+            message: `Apakah Anda yakin ingin menghapus "${file.display_filename || file.original_filename || file.filename || 'file ini'}"?`,
+            callback: async () => {
+                try {
+                    await arsipApi.deleteFile(fileId(file), 'Dihapus oleh admin');
+                    customSwal.toast.success({ message: 'File pengguna berhasil dihapus' });
+                    await loadFiles(selectedUser);
+                } catch (err) {
+                    const formatted = await formatArsipError(err);
+                    customSwal.toast.error({ message: formatted.message });
+                }
+            },
+        });
+    };
+
+    const openFolder = (category) => {
+        setActiveCategoryId(categoryId(category));
+        setSelectedFileIds([]);
+    };
+
+    const closeFolder = () => {
+        setActiveCategoryId('');
+        setSelectedFileIds([]);
+    };
+
+    const deleteCategory = (category) => {
+        if (category.files_count > 0) return;
+        customSwal.question({
+            title: 'Hapus kategori pengguna?',
+            message: `Kategori "${category.name}" akan dihapus.`,
+            callback: async () => {
+                try {
+                    await arsipApi.deleteCategory(categoryId(category));
+                    customSwal.toast.success({ message: 'Kategori berhasil dihapus' });
+                    await loadCategories(selectedUser);
+                } catch (err) {
+                    const formatted = await formatArsipError(err);
+                    customSwal.toast.error({ message: formatted.message });
+                }
+            },
+        });
+    };
+
+    const toggleFileSelection = (file) => {
+        const id = fileId(file);
+        setSelectedFileIds((prev) => prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]);
+    };
+
+    const toggleAllVisibleFiles = (checked) => {
+        setSelectedFileIds(checked ? visibleFiles.map(fileId).filter(Boolean) : []);
+    };
+
+    const bulkDownload = async () => {
+        for (const file of selectedFiles) {
+            await download(file);
+        }
+    };
+
+    const bulkDelete = () => {
+        if (!selectedFiles.length) return;
+        customSwal.question({
+            title: 'Hapus file pengguna terpilih?',
+            message: `${selectedFiles.length} file akan dihapus.`,
+            callback: async () => {
+                for (const file of selectedFiles) {
+                    await arsipApi.deleteFile(fileId(file), 'Dihapus bulk oleh admin');
+                }
+                customSwal.toast.success({ message: 'File terpilih berhasil dihapus' });
+                setSelectedFileIds([]);
+                await loadFiles(selectedUser);
+            },
+        });
+    };
+
     const userColumns = [
         { field: 'identifier', headerName: 'Identifier', width: 150, valueGetter: (value, row) => identifierOf(row) || '-' },
         { field: 'name', headerName: 'Nama', flex: 1, minWidth: 190, valueGetter: (value, row) => nameOf(row) },
@@ -267,12 +370,18 @@ export default function AdminArchive() {
     ];
 
     const fileColumns = [
-        { field: 'display_filename', headerName: 'File', flex: 1, minWidth: 220, valueGetter: (value, row) => row.display_filename || row.original_filename || row.filename || '-' },
-        { field: 'extension', headerName: 'Ext', width: 80, valueGetter: (value, row) => row.extension || '-' },
-        { field: 'file_size_bytes', headerName: 'Ukuran', width: 120, renderCell: (params) => bytes(params.row.file_size_bytes ?? params.row.size) },
-        { field: 'status', headerName: 'Status', width: 130, renderCell: (params) => <StatusChip status={params.row.status || (params.row.is_current === false ? 'archived' : 'available')} /> },
-        { field: 'created_at', headerName: 'Upload', width: 170, renderCell: (params) => dateTime(params.row.created_at ?? params.row.uploaded_at) },
-        { field: 'actions', headerName: 'Aksi', width: 120, sortable: false, renderCell: (params) => <Button size="small" aria-label="Download file pengguna" disabled={!fileId(params.row)} onClick={() => download(params.row)} sx={buttonSx}><DownloadOutlined sx={{ fontSize: 16 }} /></Button> },
+        { field: 'select', headerName: '', width: 56, sortable: false, filterable: false, renderHeader: () => <Checkbox size="small" disabled={!visibleFiles.length} checked={visibleFiles.length > 0 && selectedFileIds.length === visibleFiles.length} indeterminate={selectedFileIds.length > 0 && selectedFileIds.length < visibleFiles.length} onChange={(event) => toggleAllVisibleFiles(event.target.checked)} />, renderCell: (params) => params.row.row_type === 'file' ? <Checkbox size="small" checked={selectedFileIds.includes(fileId(params.row))} onChange={() => toggleFileSelection(params.row)} /> : null },
+        { field: 'display_filename', headerName: activeCategory ? `Isi ${activeCategory.name}` : 'File', flex: 1, minWidth: 220, renderCell: (params) => params.row.row_type === 'folder' ? <button type="button" className="flex items-center gap-2 font-semibold text-blue-700 hover:underline" onClick={() => openFolder(params.row)}><FolderOutlined fontSize="small" />{params.row.name}<span className="text-xs font-normal text-zinc-500">({params.row.files_count || 0})</span></button> : <span className="flex items-center gap-2"><InsertDriveFileOutlined fontSize="small" />{params.row.display_filename || params.row.original_filename || params.row.filename || '-'}</span> },
+        { field: 'extension', headerName: 'Ext', width: 80, renderCell: (params) => params.row.row_type === 'file' ? (params.row.extension || '-') : '-' },
+        { field: 'file_size_bytes', headerName: 'Ukuran', width: 120, renderCell: (params) => params.row.row_type === 'file' ? bytes(params.row.file_size_bytes ?? params.row.size) : '-' },
+        { field: 'status', headerName: 'Status', width: 130, renderCell: (params) => params.row.row_type === 'file' ? <StatusChip status={params.row.status || (params.row.is_current === false ? 'archived' : 'available')} /> : '-' },
+        { field: 'created_at', headerName: 'Upload', width: 170, renderCell: (params) => params.row.row_type === 'file' ? dateTime(params.row.created_at ?? params.row.uploaded_at) : '-' },
+        { field: 'actions', headerName: 'Aksi', width: 150, sortable: false, renderCell: (params) => params.row.row_type === 'file' ? (
+            <div className="flex gap-1">
+                <Button size="small" aria-label="Download file pengguna" disabled={!fileId(params.row)} onClick={() => download(params.row)} sx={buttonSx}><DownloadOutlined sx={{ fontSize: 16 }} /></Button>
+                <Button size="small" color="error" aria-label="Hapus file pengguna" disabled={!fileId(params.row)} onClick={() => deleteFile(params.row)} sx={buttonSx}><DeleteOutlined sx={{ fontSize: 16 }} /></Button>
+            </div>
+        ) : <Button size="small" color="error" disabled={params.row.files_count > 0} onClick={() => deleteCategory(params.row)} sx={buttonSx}><DeleteOutlined sx={{ fontSize: 16 }} /></Button> },
     ];
 
     return (
@@ -320,7 +429,17 @@ export default function AdminArchive() {
                     </div>
                 </div>
                 {filesGap && <Alert severity="warning" sx={{ mb: 2, borderRadius: '0.5rem' }}>{filesGap}</Alert>}
-                <CustomDataTable rows={files} columns={fileColumns} loading={filesLoading} getRowId={(row) => fileId(row)} pageSize={25} pageSizeOptions={[25, 50]} />
+                <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+                    <div className="flex items-center gap-2 text-sm text-zinc-600">
+                        {activeCategory && <Button size="small" startIcon={<ArrowBackOutlined />} onClick={closeFolder} sx={{ textTransform: 'none' }}>File Pengguna</Button>}
+                        <span className="font-semibold text-zinc-800">{activeCategory ? activeCategory.name : 'File Pengguna'}</span>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                        <Button size="small" variant="outlined" disabled={!selectedFiles.length} startIcon={<DownloadOutlined />} onClick={bulkDownload} sx={buttonSx}>Download ({selectedFiles.length})</Button>
+                        <Button size="small" variant="outlined" color="error" disabled={!selectedFiles.length} startIcon={<DeleteOutlined />} onClick={bulkDelete} sx={buttonSx}>Hapus ({selectedFiles.length})</Button>
+                    </div>
+                </div>
+                <CustomDataTable rows={tableRows} columns={fileColumns} loading={filesLoading} getRowId={(row) => row.row_type === 'folder' ? row.row_id : fileId(row)} pageSize={25} pageSizeOptions={[25, 50]} />
             </section>
 
             <Dialog open={categoryOpen} onClose={closeCategoryModal} maxWidth="xs" fullWidth>
