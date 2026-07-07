@@ -136,6 +136,12 @@ export const arsipApi = {
         );
     },
 
+    // Notifications
+    notifications: (params) => getJson('/notifications', params),
+    notificationUnreadCount: () => getJson('/notifications/unread-count'),
+    markNotificationRead: (id) => postJson(`/notifications/${id}/read`),
+    markAllNotificationsRead: () => postJson('/notifications/read-all'),
+
     // Export Jobs
     exportJobs: (params) => getJson('/admin/export-jobs', params),
     createExportJob: (payload) => postJson('/admin/export-jobs', payload),

@@ -3,6 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import { Avatar, Fade, IconButton, Slide } from "@mui/material";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useUser } from "../contexts/UserContext";
+import ArsipNotificationBell from "../features/arsip-digital/components/ArsipNotificationBell";
 import {
     DashboardOutlined,
     FolderOutlined,
@@ -137,6 +138,7 @@ export default function MainLayout({ children }) {
                                                 Arsip Digital
                                             </h1>
                                         </div>
+                                        <ArsipNotificationBell enabled={isAdmin || isUser} />
                                     </div>
                                 </div>
 
