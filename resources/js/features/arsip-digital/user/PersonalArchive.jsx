@@ -83,6 +83,10 @@ export default function PersonalArchive() {
     });
     const [uploadError, setUploadError] = useState('');
     const [uploading, setUploading] = useState(false);
+    const [categoryOpen, setCategoryOpen] = useState(false);
+    const [categoryForm, setCategoryForm] = useState({ name: '', description: '' });
+    const [categoryError, setCategoryError] = useState('');
+    const [creatingCategory, setCreatingCategory] = useState(false);
 
     const fetchFiles = useCallback(async () => {
         setListData((prev) => ({ ...prev, loading: true }));
@@ -106,10 +110,13 @@ export default function PersonalArchive() {
     const fetchCategories = async () => {
         try {
             const res = await arsipApi.categories();
-            setCategories(unwrapListResponse(res, 'categories').data);
+            const nextCategories = unwrapListResponse(res, 'categories').data;
+            setCategories(nextCategories);
+            return nextCategories;
         } catch (err) {
             const formatted = await formatArsipError(err);
             customSwal.toast.error({ message: formatted.message });
+            return [];
         }
     };
 
@@ -218,6 +225,50 @@ export default function PersonalArchive() {
         setUploadError('');
     };
 
+    const handleCategoryOpen = () => {
+        setCategoryForm({ name: '', description: '' });
+        setCategoryError('');
+        setCategoryOpen(true);
+    };
+
+    const handleCategoryClose = () => {
+        setCategoryOpen(false);
+        setCategoryError('');
+    };
+
+    const handleCategorySubmit = async () => {
+        const name = categoryForm.name.trim();
+        const description = categoryForm.description.trim();
+        if (!name) {
+            setCategoryError('Nama kategori tidak boleh kosong');
+            return;
+        }
+
+        setCreatingCategory(true);
+        try {
+            const res = await arsipApi.createCategory({
+                category_type: 'personal',
+                name,
+                ...(description ? { description } : {}),
+            });
+            const created = res?.data?.category ?? res?.category ?? res?.data ?? res;
+            const nextCategories = await fetchCategories();
+            const newCategory = nextCategories.find((cat) => String(cat.category_id ?? cat.id) === String(created?.category_id ?? created?.id))
+                ?? nextCategories.find((cat) => cat.name === name);
+            const newCategoryId = newCategory?.category_id ?? newCategory?.id ?? created?.category_id ?? created?.id;
+            if (uploadOpen && newCategoryId) {
+                setUploadForm((prev) => ({ ...prev, category_id: newCategoryId }));
+            }
+            customSwal.toast.success({ message: 'Kategori berhasil ditambahkan' });
+            handleCategoryClose();
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            setCategoryError(formatted.message);
+        } finally {
+            setCreatingCategory(false);
+        }
+    };
+
     const handleFileChange = (e) => {
         const file = e.target.files?.[0] || null;
         setUploadForm((prev) => ({
@@ -234,10 +285,6 @@ export default function PersonalArchive() {
             setUploadError(validationError);
             return;
         }
-        if (!uploadForm.category_id) {
-            setUploadError('Pilih kategori terlebih dahulu');
-            return;
-        }
         if (!uploadForm.display_filename.trim()) {
             setUploadError('Nama file tidak boleh kosong');
             return;
@@ -247,7 +294,9 @@ export default function PersonalArchive() {
         try {
             const formData = new FormData();
             formData.append('file', uploadForm.file);
-            formData.append('category_id', uploadForm.category_id);
+            if (uploadForm.category_id) {
+                formData.append('category_id', uploadForm.category_id);
+            }
             formData.append('display_filename', uploadForm.display_filename.trim());
             await arsipApi.uploadFile(formData);
             customSwal.toast.success({ message: 'File berhasil diunggah' });
@@ -351,16 +400,26 @@ export default function PersonalArchive() {
                 title="Arsip Saya"
                 subtitle="Kelola file arsip pribadi Anda"
                 actions={
-                    <Button
-                        variant="contained"
-                        size="small"
-                        startIcon={<CloudUploadOutlined />}
-                        onClick={handleUploadOpen}
-                        disabled={quotaFull}
-                        sx={{ textTransform: 'none', borderRadius: '0.5rem' }}
-                    >
-                        Upload File
-                    </Button>
+                    <div className="flex gap-2 flex-wrap">
+                        <Button
+                            variant="outlined"
+                            size="small"
+                            onClick={handleCategoryOpen}
+                            sx={{ textTransform: 'none', borderRadius: '0.5rem' }}
+                        >
+                            Tambah Kategori
+                        </Button>
+                        <Button
+                            variant="contained"
+                            size="small"
+                            startIcon={<CloudUploadOutlined />}
+                            onClick={handleUploadOpen}
+                            disabled={quotaFull}
+                            sx={{ textTransform: 'none', borderRadius: '0.5rem' }}
+                        >
+                            Upload File
+                        </Button>
+                    </div>
                 }
             />
 
@@ -430,20 +489,30 @@ export default function PersonalArchive() {
                             Maks: {uploadMaxFileSizeMb} MB | Ekstensi: {uploadAllowedExtensions.length ? uploadAllowedExtensions.join(', ') : 'Semua ekstensi'}
                             {settingsFallback ? ' | Memakai batas aman karena pengaturan server tidak tersedia' : ''}
                         </p>
-                        <TextField
-                            select
-                            size="small"
-                            label="Kategori"
-                            value={uploadForm.category_id}
-                            onChange={(e) => setUploadForm((prev) => ({ ...prev, category_id: e.target.value }))}
-                            fullWidth
-                        >
-                            {categories.map((cat) => (
-                                <MenuItem key={cat.category_id} value={cat.category_id}>
-                                    {cat.name}
-                                </MenuItem>
-                            ))}
-                        </TextField>
+                        <div className="flex gap-2 items-start">
+                            <TextField
+                                select
+                                size="small"
+                                label="Kategori (opsional)"
+                                value={uploadForm.category_id}
+                                onChange={(e) => setUploadForm((prev) => ({ ...prev, category_id: e.target.value }))}
+                                fullWidth
+                            >
+                                {categories.map((cat) => (
+                                    <MenuItem key={cat.category_id ?? cat.id} value={cat.category_id ?? cat.id}>
+                                        {cat.name}
+                                    </MenuItem>
+                                ))}
+                            </TextField>
+                            <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={handleCategoryOpen}
+                                sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
+                            >
+                                Tambah Kategori
+                            </Button>
+                        </div>
                         <TextField
                             size="small"
                             label="Nama File Tampilan"
@@ -469,6 +538,62 @@ export default function PersonalArchive() {
                         sx={{ textTransform: 'none' }}
                     >
                         {uploading ? 'Mengunggah...' : 'Upload'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Category Dialog */}
+            <Dialog
+                open={categoryOpen}
+                onClose={handleCategoryClose}
+                maxWidth="xs"
+                fullWidth
+            >
+                <DialogTitle sx={{ fontSize: '1rem', fontWeight: 600 }}>
+                    Tambah Kategori
+                </DialogTitle>
+                <DialogContent>
+                    <div className="flex flex-col gap-4 mt-2">
+                        {categoryError && (
+                            <Alert severity="error">
+                                {categoryError}
+                            </Alert>
+                        )}
+                        <TextField
+                            size="small"
+                            label="Nama Kategori"
+                            value={categoryForm.name}
+                            onChange={(e) => setCategoryForm((prev) => ({ ...prev, name: e.target.value }))}
+                            fullWidth
+                            autoFocus
+                        />
+                        <TextField
+                            size="small"
+                            label="Deskripsi (opsional)"
+                            value={categoryForm.description}
+                            onChange={(e) => setCategoryForm((prev) => ({ ...prev, description: e.target.value }))}
+                            fullWidth
+                            multiline
+                            minRows={2}
+                        />
+                    </div>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2 }}>
+                    <Button
+                        onClick={handleCategoryClose}
+                        size="small"
+                        sx={{ textTransform: 'none' }}
+                    >
+                        Batal
+                    </Button>
+                    <Button
+                        variant="contained"
+                        onClick={handleCategorySubmit}
+                        disabled={creatingCategory}
+                        size="small"
+                        sx={{ textTransform: 'none' }}
+                    >
+                        {creatingCategory ? 'Menyimpan...' : 'Simpan'}
                     </Button>
                 </DialogActions>
             </Dialog>

@@ -31,6 +31,7 @@ export const arsipApi = {
     // Files
     files: (params) => getJson('/files', params),
     uploadFile: (formData) => uploadFormData('/files', formData),
+    adminUploadForUser: (formData) => uploadFormData('/admin/files/upload-for-user', formData),
     downloadFile: (file) => {
         const fileId = file?.file_id ?? file?.id;
         if (fileId == null) {

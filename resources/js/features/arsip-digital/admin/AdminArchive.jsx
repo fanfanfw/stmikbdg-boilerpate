@@ -6,7 +6,8 @@ import { customSwal } from '../../../components/CustomSwal';
 import PageHeader from '../../../components/PageHeader';
 import StatusChip from '../../../components/StatusChip';
 import CustomDataTable from '../../../components/CustomDataTable';
-import { Alert, Button, MenuItem, TextField } from '@mui/material';
+import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, TextField } from '@mui/material';
+import CloudUploadOutlined from '@mui/icons-material/CloudUploadOutlined';
 import DownloadOutlined from '@mui/icons-material/DownloadOutlined';
 import RefreshOutlined from '@mui/icons-material/RefreshOutlined';
 import SearchOutlined from '@mui/icons-material/SearchOutlined';
@@ -35,6 +36,21 @@ function fileId(file) {
     return file?.file_id ?? file?.id;
 }
 
+function categoryId(category) {
+    return category?.category_id ?? category?.id;
+}
+
+function ownerTargetPayload(user) {
+    const ownerRole = user?.role ?? user?.owner_role;
+    const ownerUserId = user?.user_id ?? user?.id;
+    const ownerIdentifier = identifierOf(user);
+    return {
+        owner_role: ownerRole,
+        ...(ownerUserId ? { owner_user_id: ownerUserId } : {}),
+        ...(ownerIdentifier ? { owner_identifier: ownerIdentifier } : {}),
+    };
+}
+
 export default function AdminArchive() {
     const [users, setUsers] = useState([]);
     const [usersMeta, setUsersMeta] = useState(null);
@@ -47,6 +63,15 @@ export default function AdminArchive() {
     const [filesMeta, setFilesMeta] = useState(null);
     const [filesLoading, setFilesLoading] = useState(false);
     const [filesGap, setFilesGap] = useState('');
+    const [categories, setCategories] = useState([]);
+    const [categoryOpen, setCategoryOpen] = useState(false);
+    const [categoryForm, setCategoryForm] = useState({ name: '', description: '' });
+    const [categoryError, setCategoryError] = useState('');
+    const [creatingCategory, setCreatingCategory] = useState(false);
+    const [uploadOpen, setUploadOpen] = useState(false);
+    const [uploadForm, setUploadForm] = useState({ file: null, category_id: '', display_filename: '' });
+    const [uploadError, setUploadError] = useState('');
+    const [uploading, setUploading] = useState(false);
 
     const loadUsers = async () => {
         setUsersLoading(true);
@@ -99,6 +124,25 @@ export default function AdminArchive() {
         }
     };
 
+    const loadCategories = async (user = selectedUser) => {
+        if (!user) return [];
+        try {
+            const response = await arsipApi.categories({
+                category_type: 'personal',
+                owner_role: user.role ?? user.owner_role,
+                owner_user_id: user.user_id ?? user.id,
+            });
+            const nextCategories = unwrapList(response, ['categories']).data;
+            setCategories(nextCategories);
+            return nextCategories;
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            customSwal.toast.error({ message: formatted.message });
+            setCategories([]);
+            return [];
+        }
+    };
+
     useEffect(() => {
         loadUsers();
     }, []);
@@ -106,7 +150,101 @@ export default function AdminArchive() {
     const selectUser = async (user) => {
         setSelectedUser(user);
         setFiles([]);
-        await loadFiles(user);
+        setCategories([]);
+        await Promise.all([loadFiles(user), loadCategories(user)]);
+    };
+
+    const openCategoryModal = () => {
+        setCategoryForm({ name: '', description: '' });
+        setCategoryError('');
+        setCategoryOpen(true);
+    };
+
+    const closeCategoryModal = () => {
+        setCategoryOpen(false);
+        setCategoryError('');
+    };
+
+    const submitCategory = async () => {
+        if (!selectedUser) return;
+        const name = categoryForm.name.trim();
+        const description = categoryForm.description.trim();
+        if (!name) {
+            setCategoryError('Nama kategori tidak boleh kosong');
+            return;
+        }
+
+        setCreatingCategory(true);
+        try {
+            const response = await arsipApi.createCategory({
+                category_type: 'personal',
+                ...ownerTargetPayload(selectedUser),
+                name,
+                ...(description ? { description } : {}),
+            });
+            const created = response?.data?.category ?? response?.category ?? response?.data ?? response;
+            const nextCategories = await loadCategories(selectedUser);
+            const newCategory = nextCategories.find((category) => String(categoryId(category)) === String(categoryId(created)))
+                ?? nextCategories.find((category) => category.name === name);
+            const newCategoryId = categoryId(newCategory) ?? categoryId(created);
+            if (uploadOpen && newCategoryId) {
+                setUploadForm((prev) => ({ ...prev, category_id: newCategoryId }));
+            }
+            await loadFiles(selectedUser);
+            customSwal.toast.success({ message: 'Kategori berhasil ditambahkan' });
+            closeCategoryModal();
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            setCategoryError(formatted.message);
+        } finally {
+            setCreatingCategory(false);
+        }
+    };
+
+    const openUploadModal = () => {
+        setUploadForm({ file: null, category_id: '', display_filename: '' });
+        setUploadError('');
+        setUploadOpen(true);
+        loadCategories();
+    };
+
+    const closeUploadModal = () => {
+        setUploadOpen(false);
+        setUploadError('');
+    };
+
+    const handleFileChange = (event) => {
+        const file = event.target.files?.[0] || null;
+        setUploadForm((prev) => ({ ...prev, file, display_filename: file ? file.name : prev.display_filename }));
+        setUploadError('');
+    };
+
+    const submitUpload = async () => {
+        if (!selectedUser) return;
+        if (!uploadForm.file) {
+            setUploadError('Pilih file terlebih dahulu');
+            return;
+        }
+
+        setUploading(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', uploadForm.file);
+            formData.append('display_filename', uploadForm.display_filename.trim() || uploadForm.file.name);
+            Object.entries(ownerTargetPayload(selectedUser)).forEach(([key, value]) => formData.append(key, value));
+            if (uploadForm.category_id) {
+                formData.append('category_id', uploadForm.category_id);
+            }
+            await arsipApi.adminUploadForUser(formData);
+            customSwal.toast.success({ message: 'File berhasil diunggah' });
+            closeUploadModal();
+            await Promise.all([loadFiles(selectedUser), loadCategories(selectedUser)]);
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            setUploadError(formatted.message);
+        } finally {
+            setUploading(false);
+        }
     };
 
     const download = async (file) => {
@@ -175,11 +313,53 @@ export default function AdminArchive() {
             <section className="bg-white rounded-lg border border-zinc-200 p-4">
                 <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
                     <div><h2 className="text-sm font-semibold text-zinc-800">File Pengguna</h2><p className="text-xs text-zinc-500">{selectedUser ? `${identifierOf(selectedUser) || '-'} · ${nameOf(selectedUser)}` : 'Pilih pengguna untuk melihat file.'}</p></div>
-                    <div className="flex gap-2"><Button variant="outlined" disabled={!selectedUser || filesLoading} onClick={() => loadFiles()} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Muat File</Button></div>
+                    <div className="flex gap-2 flex-wrap">
+                        <Button variant="outlined" disabled={!selectedUser} onClick={openCategoryModal} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Tambah Kategori</Button>
+                        <Button variant="contained" startIcon={<CloudUploadOutlined />} disabled={!selectedUser} onClick={openUploadModal} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Upload File</Button>
+                        <Button variant="outlined" disabled={!selectedUser || filesLoading} onClick={() => loadFiles()} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Muat File</Button>
+                    </div>
                 </div>
                 {filesGap && <Alert severity="warning" sx={{ mb: 2, borderRadius: '0.5rem' }}>{filesGap}</Alert>}
                 <CustomDataTable rows={files} columns={fileColumns} loading={filesLoading} getRowId={(row) => fileId(row)} pageSize={25} pageSizeOptions={[25, 50]} />
             </section>
+
+            <Dialog open={categoryOpen} onClose={closeCategoryModal} maxWidth="xs" fullWidth>
+                <DialogTitle sx={{ fontSize: '1rem', fontWeight: 600 }}>Tambah Kategori</DialogTitle>
+                <DialogContent>
+                    <div className="flex flex-col gap-4 mt-2">
+                        {categoryError && <Alert severity="error">{categoryError}</Alert>}
+                        <TextField size="small" label="Nama Kategori" value={categoryForm.name} onChange={(event) => setCategoryForm((prev) => ({ ...prev, name: event.target.value }))} fullWidth autoFocus />
+                        <TextField size="small" label="Deskripsi (opsional)" value={categoryForm.description} onChange={(event) => setCategoryForm((prev) => ({ ...prev, description: event.target.value }))} fullWidth multiline minRows={2} />
+                    </div>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2 }}>
+                    <Button onClick={closeCategoryModal} size="small" sx={buttonSx}>Batal</Button>
+                    <Button variant="contained" onClick={submitCategory} disabled={creatingCategory} size="small" sx={buttonSx}>{creatingCategory ? 'Menyimpan...' : 'Simpan'}</Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={uploadOpen} onClose={closeUploadModal} maxWidth="sm" fullWidth>
+                <DialogTitle sx={{ fontSize: '1rem', fontWeight: 600 }}>Upload File</DialogTitle>
+                <DialogContent>
+                    <div className="flex flex-col gap-4 mt-2">
+                        {uploadError && <Alert severity="error">{uploadError}</Alert>}
+                        <Button variant="outlined" component="label" startIcon={<CloudUploadOutlined />} sx={buttonSx}>
+                            {uploadForm.file ? uploadForm.file.name : 'Pilih File'}
+                            <input type="file" hidden onChange={handleFileChange} />
+                        </Button>
+                        {uploadForm.file && <p className="text-xs text-zinc-500">File dipilih: {uploadForm.file.name}</p>}
+                        <TextField select size="small" label="Kategori (opsional)" value={uploadForm.category_id} onChange={(event) => setUploadForm((prev) => ({ ...prev, category_id: event.target.value }))} fullWidth>
+                            <MenuItem value="">Tanpa kategori</MenuItem>
+                            {categories.map((category) => <MenuItem key={categoryId(category)} value={categoryId(category)}>{category.name}</MenuItem>)}
+                        </TextField>
+                        <TextField size="small" label="Nama File Tampilan" value={uploadForm.display_filename} onChange={(event) => setUploadForm((prev) => ({ ...prev, display_filename: event.target.value }))} fullWidth />
+                    </div>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2 }}>
+                    <Button onClick={closeUploadModal} size="small" sx={buttonSx}>Batal</Button>
+                    <Button variant="contained" onClick={submitUpload} disabled={uploading} size="small" sx={buttonSx}>{uploading ? 'Mengunggah...' : 'Upload'}</Button>
+                </DialogActions>
+            </Dialog>
         </div>
     );
 }
