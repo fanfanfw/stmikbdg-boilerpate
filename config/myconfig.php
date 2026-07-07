@@ -7,4 +7,7 @@ return [
     'login' => [
         'base_url' => env('LOGIN_BASE_URL', null),
     ],
+    'simak' => [
+        'base_url' => env('SIMAK_BASE_URL', null),
+    ],
 ];

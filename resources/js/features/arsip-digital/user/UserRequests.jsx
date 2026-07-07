@@ -23,6 +23,14 @@ function unwrapListResponse(response, key) {
     };
 }
 
+function assignmentOf(row) {
+    return row?.assignment || row?.assignments?.[0] || null;
+}
+
+function assignmentFilesCount(assignment) {
+    return assignment?.files_count ?? assignment?.request_files?.length ?? assignment?.files?.length ?? 0;
+}
+
 export default function UserRequests() {
     const navigate = useNavigate();
 
@@ -66,11 +74,10 @@ export default function UserRequests() {
         return new Date(deadline) < new Date();
     };
 
-    const pendingAssignments = listData.data.filter(
-        (row) =>
-            row.assignment &&
-            (row.assignment.status === 'pending' || row.assignment.status === 'not_submitted')
-    );
+    const pendingAssignments = listData.data.filter((row) => {
+        const assignment = assignmentOf(row);
+        return ['not_submitted', 'waiting_verification', 'pending', 'rejected'].includes(assignment?.status);
+    });
 
     const filteredData = listData.data.filter((row) => {
         const matchesSearch =
@@ -79,7 +86,7 @@ export default function UserRequests() {
 
         const matchesStatus =
             filters.status === 'all' ||
-            (row.assignment && row.assignment.status === filters.status);
+            assignmentOf(row)?.status === filters.status;
 
         return matchesSearch && matchesStatus;
     });
@@ -118,7 +125,7 @@ export default function UserRequests() {
             width: 200,
             renderCell: (params) => {
                 const deadline = params.value;
-                const assignmentStatus = params.row.assignment?.status;
+                const assignmentStatus = assignmentOf(params.row)?.status;
                 const late = isPastDeadline(deadline, assignmentStatus);
 
                 return (
@@ -146,9 +153,9 @@ export default function UserRequests() {
             field: 'assignment_status',
             headerName: 'Status',
             width: 160,
-            valueGetter: (value, row) => row.assignment?.status || '-',
+            valueGetter: (value, row) => assignmentOf(row)?.status || '-',
             renderCell: (params) => {
-                const status = params.row.assignment?.status;
+                const status = assignmentOf(params.row)?.status;
                 if (!status) return '-';
                 return <StatusChip status={status} />;
             },
@@ -159,11 +166,11 @@ export default function UserRequests() {
             width: 120,
             align: 'center',
             headerAlign: 'center',
-            valueGetter: (value, row) => row.assignment?.files_count ?? 0,
+            valueGetter: (value, row) => assignmentFilesCount(assignmentOf(row)),
             renderCell: (params) => (
                 <div className="flex items-center justify-center gap-1">
                     <DescriptionOutlined sx={{ fontSize: 16, color: '#71717a' }} />
-                    <span>{params.row.assignment?.files_count ?? 0}</span>
+                    <span>{assignmentFilesCount(assignmentOf(params.row))}</span>
                 </div>
             ),
         },

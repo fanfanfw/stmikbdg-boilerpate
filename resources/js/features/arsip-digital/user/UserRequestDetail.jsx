@@ -29,6 +29,7 @@ import {
     DownloadOutlined,
     ArrowBackOutlined,
     DescriptionOutlined,
+    CheckCircleOutlined,
 } from '@mui/icons-material';
 
 const buttonSx = {
@@ -397,23 +398,35 @@ export default function UserRequestDetail() {
                 <DialogContent dividers>
                     {filesLoading ? <CustomLoading /> : (
                         <List>
-                            {personalFiles.map((file) => (
-                                <ListItem
-                                    key={file.file_id}
-                                    button
-                                    selected={selectedReuseFileId === file.file_id}
-                                    onClick={() => setSelectedReuseFileId(file.file_id)}
-                                    divider
-                                >
-                                    <DescriptionOutlined sx={{ color: '#71717a', mr: 2 }} />
-                                    <ListItemText
-                                        primary={fileName(file)}
-                                        secondary={`${bytes(fileSize(file))} · ${dateTime(file.created_at)}`}
-                                        primaryTypographyProps={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontWeight: 600 }}
-                                        secondaryTypographyProps={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}
-                                    />
-                                </ListItem>
-                            ))}
+                            {personalFiles.map((file) => {
+                                const isSelected = selectedReuseFileId === file.file_id;
+
+                                return (
+                                    <ListItem
+                                        key={file.file_id}
+                                        button
+                                        selected={isSelected}
+                                        onClick={() => setSelectedReuseFileId(file.file_id)}
+                                        divider
+                                        sx={{
+                                            borderRadius: '0.5rem',
+                                            border: isSelected ? '1px solid #2563eb' : '1px solid transparent',
+                                            bgcolor: isSelected ? '#eff6ff' : 'transparent',
+                                            '&.Mui-selected': { bgcolor: '#eff6ff' },
+                                            '&.Mui-selected:hover': { bgcolor: '#dbeafe' },
+                                        }}
+                                    >
+                                        <DescriptionOutlined sx={{ color: isSelected ? '#2563eb' : '#71717a', mr: 2 }} />
+                                        <ListItemText
+                                            primary={fileName(file)}
+                                            secondary={`${bytes(fileSize(file))} · ${dateTime(file.created_at)}`}
+                                            primaryTypographyProps={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontWeight: 600, color: isSelected ? '#1d4ed8' : '#27272a' }}
+                                            secondaryTypographyProps={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}
+                                        />
+                                        {isSelected && <CheckCircleOutlined sx={{ color: '#2563eb' }} />}
+                                    </ListItem>
+                                );
+                            })}
                             {!personalFiles.length && <div className="text-sm text-zinc-500 py-6 text-center">Tidak ada file personal yang tersedia.</div>}
                         </List>
                     )}

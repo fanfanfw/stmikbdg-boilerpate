@@ -73,6 +73,10 @@ function currentFiles(assignment) {
     return (assignment?.request_files || assignment?.files || []).filter((item) => item.is_current !== false);
 }
 
+function isVerifiable(assignment) {
+    return assignment?.status === 'waiting_verification';
+}
+
 function fileName(requestFile) {
     const file = requestFile?.file || requestFile;
     return file?.display_filename || file?.original_filename || file?.filename || `File #${requestFile?.request_file_id || file?.file_id || '-'}`;
@@ -144,11 +148,17 @@ export default function AdminRequestDetail() {
     );
 
     const approvableSelectedIds = useMemo(
-        () => selectedPageAssignments.filter((assignment) => currentFiles(assignment).length > 0).map(assignmentId),
+        () => selectedPageAssignments.filter((assignment) => isVerifiable(assignment) && currentFiles(assignment).length > 0).map(assignmentId),
         [selectedPageAssignments],
     );
 
-    const allPageSelected = filteredAssignments.length > 0 && filteredAssignments.every((assignment) => selectedIds.includes(assignmentId(assignment)));
+    const rejectableSelectedIds = useMemo(
+        () => selectedPageAssignments.filter(isVerifiable).map(assignmentId),
+        [selectedPageAssignments],
+    );
+
+    const selectableAssignments = filteredAssignments.filter(isVerifiable);
+    const allPageSelected = selectableAssignments.length > 0 && selectableAssignments.every((assignment) => selectedIds.includes(assignmentId(assignment)));
 
     const loadDetail = async () => {
         setLoading(true);
@@ -232,7 +242,7 @@ export default function AdminRequestDetail() {
     };
 
     const approve = async (assignment) => {
-        if (currentFiles(assignment).length < 1) return;
+        if (!isVerifiable(assignment) || currentFiles(assignment).length < 1) return;
         if (!(await confirmAction('Approve assignment?', `${assignment.identifier} - ${assignment.name_snapshot || 'tanpa nama'}`, 'Approve'))) return;
         setActionLoading(true);
         try {
@@ -248,6 +258,7 @@ export default function AdminRequestDetail() {
     };
 
     const reject = async (assignment) => {
+        if (!isVerifiable(assignment)) return;
         const reason = await promptReason('Reject assignment?', `${assignment.identifier} - ${assignment.name_snapshot || 'tanpa nama'}`);
         if (!reason) return;
         setActionLoading(true);
@@ -280,12 +291,12 @@ export default function AdminRequestDetail() {
     };
 
     const bulkReject = async () => {
-        if (!selectedPageAssignments.length) return;
-        const reason = await promptReason('Bulk reject assignment?', `${selectedPageAssignments.length} assignment di halaman ini akan ditolak.`);
+        if (!rejectableSelectedIds.length) return;
+        const reason = await promptReason('Bulk reject assignment?', `${rejectableSelectedIds.length} assignment di halaman ini akan ditolak.`);
         if (!reason) return;
         setActionLoading(true);
         try {
-            await arsipApi.bulkRejectAssignments(selectedPageAssignments.map(assignmentId), reason);
+            await arsipApi.bulkRejectAssignments(rejectableSelectedIds, reason);
             customSwal.toast.success({ message: 'Bulk reject selesai.' });
             await refreshAll();
         } catch (err) {
@@ -337,7 +348,7 @@ export default function AdminRequestDetail() {
     };
 
     const togglePageSelection = (checked) => {
-        const pageIds = filteredAssignments.map(assignmentId);
+        const pageIds = selectableAssignments.map(assignmentId);
         if (checked) {
             setSelectedIds(Array.from(new Set([...selectedIds, ...pageIds])));
             return;
@@ -350,7 +361,7 @@ export default function AdminRequestDetail() {
     };
 
     const columns = [
-        { field: 'select', headerName: '', width: 55, sortable: false, filterable: false, renderHeader: () => <Checkbox size="small" checked={allPageSelected} onChange={(event) => togglePageSelection(event.target.checked)} />, renderCell: (params) => <Checkbox size="small" checked={selectedIds.includes(assignmentId(params.row))} onChange={() => toggleAssignment(assignmentId(params.row))} /> },
+        { field: 'select', headerName: '', width: 55, sortable: false, filterable: false, renderHeader: () => <Checkbox size="small" checked={allPageSelected} onChange={(event) => togglePageSelection(event.target.checked)} />, renderCell: (params) => <Checkbox size="small" disabled={!isVerifiable(params.row)} checked={selectedIds.includes(assignmentId(params.row))} onChange={() => toggleAssignment(assignmentId(params.row))} /> },
         { field: 'identifier', headerName: 'Identifier', width: 130, valueGetter: (value, row) => row.identifier || '-' },
         { field: 'name_snapshot', headerName: 'Nama', flex: 1, minWidth: 180, valueGetter: (value, row) => row.name_snapshot || '-' },
         { field: 'role', headerName: 'Role/Angkatan', width: 150, renderCell: (params) => `${params.row.target_role || request?.target_role || '-'}${params.row.angkatan_snapshot ? ` · ${params.row.angkatan_snapshot}` : ''}` },
@@ -365,10 +376,11 @@ export default function AdminRequestDetail() {
         { field: 'verified_at', headerName: 'Verified', width: 170, renderCell: (params) => dateTime(params.row.verified_at || params.row.approved_at || params.row.rejected_at) },
         { field: 'actions', headerName: 'Aksi', width: 260, sortable: false, filterable: false, renderCell: (params) => {
             const files = currentFiles(params.row);
+            const verifiable = isVerifiable(params.row);
             return (
                 <div className="flex gap-1 flex-wrap">
-                    <Button size="small" disabled={actionLoading || files.length < 1} onClick={() => approve(params.row)} sx={buttonSx}>Approve</Button>
-                    <Button size="small" color="error" disabled={actionLoading} onClick={() => reject(params.row)} sx={buttonSx}>Reject</Button>
+                    <Button size="small" disabled={actionLoading || !verifiable || files.length < 1} onClick={() => approve(params.row)} sx={buttonSx}>Approve</Button>
+                    <Button size="small" color="error" disabled={actionLoading || !verifiable} onClick={() => reject(params.row)} sx={buttonSx}>Reject</Button>
                     {files[0] && <Button size="small" onClick={() => downloadRequestFile(files[0])} sx={buttonSx}><DownloadOutlined sx={{ fontSize: 16 }} /></Button>}
                 </div>
             );
@@ -437,7 +449,7 @@ export default function AdminRequestDetail() {
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <Button variant="outlined" disabled={actionLoading || approvableSelectedIds.length < 1} onClick={bulkApprove} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Bulk Approve ({approvableSelectedIds.length})</Button>
-                        <Button variant="outlined" color="error" disabled={actionLoading || selectedPageAssignments.length < 1} onClick={bulkReject} sx={buttonSx}>Bulk Reject ({selectedPageAssignments.length})</Button>
+                        <Button variant="outlined" color="error" disabled={actionLoading || rejectableSelectedIds.length < 1} onClick={bulkReject} sx={buttonSx}>Bulk Reject ({rejectableSelectedIds.length})</Button>
                     </div>
                 </div>
 

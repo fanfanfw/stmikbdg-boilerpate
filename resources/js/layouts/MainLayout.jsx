@@ -1,9 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { Avatar, Fade, IconButton, Slide } from "@mui/material";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useUser } from "../contexts/UserContext";
 import ArsipNotificationBell from "../features/arsip-digital/components/ArsipNotificationBell";
+import { arsipApi } from "../libs/arsip_api";
 import {
     DashboardOutlined,
     FolderOutlined,
@@ -14,6 +15,7 @@ import {
     MenuOutlined,
     LogoutOutlined,
     PersonOutlined,
+    AppsOutlined,
 } from "@mui/icons-material";
 
 const userMenuItems = [
@@ -31,6 +33,18 @@ const adminMenuItems = [
     { label: 'Audit Log', path: '/home/audit', icon: HistoryOutlined },
     { label: 'Pengaturan', path: '/home/pengaturan', icon: SettingsOutlined },
 ];
+
+function simakBaseUrl() {
+    return document.querySelector('meta[name="simak-base-url"]')?.getAttribute('content') || '';
+}
+
+function assignmentOf(row) {
+    return row?.assignment || row?.assignments?.[0] || null;
+}
+
+function activeRequestCount(requests) {
+    return requests.filter((item) => ['not_submitted', 'waiting_verification', 'pending', 'rejected'].includes(assignmentOf(item)?.status)).length;
+}
 
 function Footer() {
     return (
@@ -78,6 +92,7 @@ export default function MainLayout({ children }) {
     const isDosen = role === 'dosen';
     const isUser = isMahasiswa || isDosen;
     const menuItems = isAdmin ? adminMenuItems : isUser ? userMenuItems : [];
+    const [pendingRequestCount, setPendingRequestCount] = useState(0);
 
     const displayName = userdata?.profile?.nama || userdata?.account?.name || userdata?.user_email || 'Memuat pengguna';
     const displayRole = isAdmin
@@ -91,6 +106,33 @@ export default function MainLayout({ children }) {
     useEffect(() => {
         setShowSidebar(false);
     }, [location.pathname, setShowSidebar]);
+
+    useEffect(() => {
+        if (!isUser) {
+            setPendingRequestCount(0);
+            return;
+        }
+
+        let active = true;
+
+        arsipApi.userRequests()
+            .then((response) => {
+                if (!active) return;
+
+                const payload = response?.data ?? response ?? {};
+                const requests = payload?.requests ?? payload?.data ?? payload;
+                const count = Array.isArray(requests) ? activeRequestCount(requests) : 0;
+
+                setPendingRequestCount(count);
+            })
+            .catch(() => {
+                if (active) setPendingRequestCount(0);
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [isUser, location.pathname]);
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-zinc-100 to-white font-jakarta text-zinc-700 text-xs sm:text-sm flex flex-col justify-between">
@@ -107,6 +149,8 @@ export default function MainLayout({ children }) {
                         menuItems={menuItems}
                         displayName={displayName}
                         displayRole={displayRole}
+                        pendingRequestCount={pendingRequestCount}
+                        simakUrl={simakBaseUrl()}
                     />
                 </div>
 
@@ -116,6 +160,8 @@ export default function MainLayout({ children }) {
                             menuItems={menuItems}
                             displayName={displayName}
                             displayRole={displayRole}
+                            pendingRequestCount={pendingRequestCount}
+                            simakUrl={simakBaseUrl()}
                             mobile
                             onClose={() => setShowSidebar(false)}
                         />
@@ -156,7 +202,7 @@ export default function MainLayout({ children }) {
     );
 }
 
-function SidebarContent({ menuItems, displayName, displayRole, mobile = false, onClose }) {
+function SidebarContent({ menuItems, displayName, displayRole, pendingRequestCount = 0, simakUrl = '', mobile = false, onClose }) {
     const location = useLocation();
 
     return (
@@ -213,9 +259,16 @@ function SidebarContent({ menuItems, displayName, displayRole, mobile = false, o
                                     }`}
                                 >
                                     <item.icon color={active ? 'primary' : undefined} fontSize="small" />
-                                    <p className="font-medium">
-                                        {item.label}
-                                    </p>
+                                    <div className="flex items-center justify-between gap-2 w-full">
+                                        <p className="font-medium">
+                                            {item.label}
+                                        </p>
+                                        {item.path === '/home/permintaan' && pendingRequestCount > 0 && (
+                                            <span className="min-w-5 h-5 px-1.5 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center">
+                                                {pendingRequestCount > 99 ? '99+' : pendingRequestCount}
+                                            </span>
+                                        )}
+                                    </div>
                                 </NavLink>
                             </div>
                         </div>
@@ -223,7 +276,15 @@ function SidebarContent({ menuItems, displayName, displayRole, mobile = false, o
                 })}
             </div>
             <hr className="my-5 border-zinc-400" />
-            <div className="relative overflow-visible w-full">
+            <div className="relative overflow-visible w-full space-y-1">
+                <div className="px-5">
+                    <a href={simakUrl || '/'} className="p-2 w-full rounded-md hover:bg-zinc-200 ease-out duration-100 flex items-center gap-3 text-zinc-600">
+                        <AppsOutlined fontSize="small" />
+                        <p className="font-medium">
+                            Menu SIMAK
+                        </p>
+                    </a>
+                </div>
                 <div className="px-5">
                     <a href="/logout" className="p-2 w-full rounded-md hover:bg-zinc-200 ease-out duration-100 flex items-center gap-3 text-red-500">
                         <LogoutOutlined fontSize="small" />
