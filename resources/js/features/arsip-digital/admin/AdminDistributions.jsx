@@ -130,7 +130,17 @@ export default function AdminDistributions() {
             const unwrapped = unwrapList(response, ['distributions']);
             setRows(unwrapped.data);
             setMeta(unwrapped.meta);
-            if (selectedId) setSelected(unwrapped.data.find((item) => distributionId(item) === selectedId) || selected);
+            if (selectedId) {
+                const refreshedSelection = unwrapped.data.find((item) => distributionId(item) === selectedId) || null;
+                setSelected(refreshedSelection);
+                if (!refreshedSelection) {
+                    setRecipients([]);
+                    setRecipientsMeta(null);
+                    setJobs([]);
+                    setBulkJob(null);
+                    setBulkFile(null);
+                }
+            }
         } catch (err) {
             if (requestSequence !== distributionRequestRef.current) return;
             const formatted = await formatArsipError(err);
@@ -310,7 +320,7 @@ export default function AdminDistributions() {
     };
 
     const remove = async (row) => {
-        if (!(await confirmAction('Hapus distribusi?', 'Distribusi akan dihapus permanen.', 'Hapus'))) return;
+        if (!(await confirmAction('Hapus draft distribusi?', 'Draft akan disembunyikan. Distribusi published/closed tidak dapat dihapus; gunakan Tarik Distribusi.', 'Hapus Draft'))) return;
         try {
             await arsipApi.deleteDistribution(distributionId(row));
             customSwal.toast.success({ message: 'Distribusi dihapus.' });
@@ -391,6 +401,12 @@ export default function AdminDistributions() {
             const formatted = await formatArsipError(err);
             setBulkError(formatted.message);
             customSwal.toast.error({ message: formatted.message });
+            if (formatted.status === 404) {
+                setSelected(null);
+                setRecipients([]);
+                setJobs([]);
+                setBulkJob(null);
+            }
         } finally {
             setBulkUploading(false);
         }
@@ -398,7 +414,7 @@ export default function AdminDistributions() {
 
     const confirmBulk = async () => {
         if (!bulkJob || bulkJob.status !== 'preview_ready' || bulkJob.confirmable === false) return;
-        if (!(await confirmAction('Konfirmasi simpan file cocok?', 'Unmatched, duplicate, dan invalid tidak ikut disimpan.', 'Konfirmasi'))) return;
+        if (!(await confirmAction('Konfirmasi simpan file cocok?', 'Hanya file Matched yang disimpan. Unmatched, Duplicate, Ambiguous, dan Invalid akan dilewati.', 'Konfirmasi'))) return;
         setActionLoading(true);
         try {
             const response = await arsipApi.confirmDistributionBulkUploadJob(activeJobId);
@@ -474,7 +490,19 @@ export default function AdminDistributions() {
     ];
 
     const entryRows = bulkJob?.entries || bulkJob?.preview_entries || [];
-    const canConfirm = bulkJob?.status === 'preview_ready' && bulkJob?.confirmable !== false;
+    const bulkStatusLabel = {
+        uploaded: 'ZIP diterima, menunggu pemeriksaan',
+        processing: 'Sedang memeriksa ZIP dan mencocokkan file',
+        preview_ready: 'Preview siap diperiksa',
+        confirming: 'Sedang menyimpan file yang cocok',
+        confirmed: 'Selesai dikonfirmasi',
+        failed: 'Pemeriksaan gagal',
+        expired: 'Preview kedaluwarsa',
+        cancelled: 'Dibatalkan',
+    };
+    const canConfirm = bulkJob?.status === 'preview_ready'
+        && bulkJob?.confirmable !== false
+        && summaryCount(bulkJob, 'matched_entries', 'matched') > 0;
 
     return (
         <div className="font-jakarta">
@@ -483,7 +511,13 @@ export default function AdminDistributions() {
             <section className="bg-white rounded-lg border border-zinc-200 p-4 mb-4 flex flex-wrap gap-3"><TextField size="small" label="Cari" value={draftFilters.search} onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: event.target.value }))} sx={{ minWidth: 220 }} /><TextField size="small" select label="Status" value={draftFilters.status} onChange={(event) => setDraftFilters((prev) => ({ ...prev, status: event.target.value }))} sx={{ minWidth: 150 }}><MenuItem value="">Semua</MenuItem><MenuItem value="draft">Draft</MenuItem><MenuItem value="published">Published</MenuItem><MenuItem value="closed">Closed</MenuItem><MenuItem value="archived">Archived</MenuItem></TextField><TextField size="small" select label="Target" value={draftFilters.target_role} onChange={(event) => setDraftFilters((prev) => ({ ...prev, target_role: event.target.value }))} sx={{ minWidth: 150 }}><MenuItem value="">Semua</MenuItem><MenuItem value="mahasiswa">Mahasiswa</MenuItem><MenuItem value="dosen">Dosen</MenuItem></TextField><Button variant="contained" startIcon={<SearchOutlined />} onClick={applyDistributionFilters} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Terapkan Filter</Button></section>
             <section className="bg-white rounded-lg border border-zinc-200 mb-4"><CustomDataTable rows={rows} columns={columns} loading={loading} getRowId={(row) => distributionId(row)} pageSize={appliedFilters.per_page} pageSizeOptions={[25, 50, 100]} paginationMode="server" rowCount={meta?.total ?? rows.length} paginationModel={{ page: (meta?.current_page ?? 1) - 1, pageSize: meta?.per_page ?? appliedFilters.per_page }} onPaginationModelChange={handleDistributionPaginationChange} /></section>
             {selected && <section className="bg-white rounded-lg border border-zinc-200 p-4 mb-4"><div className="flex items-center justify-between gap-3 flex-wrap mb-3"><div><h2 className="text-sm font-semibold text-zinc-800">Penerima Distribusi</h2><p className="text-xs text-zinc-500">{selected.title} · {selected.status}. Jumlah unduhan menentukan apakah file masih dapat diganti sesuai kebijakan server.</p></div><Button variant="outlined" onClick={() => Promise.all([loadRecipients(), loadJobs()])} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Refresh Detail</Button></div><CustomDataTable rows={recipients} columns={recipientColumns} loading={recipientsLoading} getRowId={(row) => recipientId(row)} pageSize={50} pageSizeOptions={[25, 50, 100]} paginationMode={recipientsMeta ? 'server' : 'client'} rowCount={recipientsMeta?.total ?? recipients.length} paginationModel={recipientsPagination} onPaginationModelChange={handleRecipientsPaginationChange} /></section>}
-            {selected && <section className="bg-white rounded-lg border border-zinc-200 p-4"><div className="mb-3"><h2 className="text-sm font-semibold text-zinc-800">Bulk Upload ZIP</h2><p className="text-xs text-zinc-500 mt-1">Upload ZIP berisi file personal. Backend mencocokkan nama file ke identifier penerima dan menampilkan preview. File unmatched, duplicate, dan invalid tidak ikut disimpan saat konfirmasi.</p></div>{bulkError && <Alert severity="warning" sx={{ mb: 2, borderRadius: '0.5rem' }}>{bulkError}</Alert>}<div className="flex flex-wrap gap-2 mb-3"><Button component="label" variant="outlined" startIcon={<CloudUploadOutlined />} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>{bulkFile ? `${bulkFile.name} · ${bytes(bulkFile.size)}` : 'Pilih ZIP'}<input type="file" hidden accept=".zip,application/zip,application/x-zip-compressed" onChange={(event) => setBulkFile(event.target.files?.[0] || null)} /></Button><Button variant="contained" disabled={bulkUploading || !bulkFile} onClick={uploadBulkZip} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>{bulkUploading ? 'Mengunggah...' : 'Upload ZIP & Preview'}</Button><Button variant="outlined" disabled={!bulkJob} onClick={refreshBulkJob} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Refresh Job</Button><Button variant="contained" disabled={!canConfirm || actionLoading} onClick={confirmBulk} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Konfirmasi</Button><Button color="error" disabled={!bulkJob || BULK_ZIP_TERMINAL.includes(bulkJob.status) || actionLoading} onClick={cancelBulk} sx={buttonSx}>Batalkan</Button></div><div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">{[['Matched', summaryCount(bulkJob, 'matched_entries', 'matched')], ['Unmatched', summaryCount(bulkJob, 'unmatched_entries', 'unmatched')], ['Duplicate', summaryCount(bulkJob, 'duplicate_entries', 'duplicate')], ['Invalid', summaryCount(bulkJob, 'invalid_entries', 'invalid')], ['Replace', summaryCount(bulkJob, 'will_replace_entries', 'will_replace')]].map(([label, value]) => <div key={label} className="rounded-lg bg-zinc-50 border border-zinc-200 p-3"><span className="text-xs text-zinc-500">{label}</span><strong className="block text-lg text-zinc-800">{value}</strong></div>)}</div>{bulkJob && <Alert severity={bulkJob.status === 'preview_ready' ? 'success' : 'info'} sx={{ mb: 2, borderRadius: '0.5rem' }}>Job #{activeJobId} · {bulkJob.status}. Konfirmasi aktif hanya saat preview_ready dan backend mengizinkan.</Alert>}<CustomDataTable rows={entryRows} columns={[{ field: 'original_filename', headerName: 'File', flex: 1, minWidth: 220, valueGetter: (value, row) => row.original_filename || row.display_filename || row.entry_path || '-' }, { field: 'identifier', headerName: 'Identifier', width: 150, valueGetter: (value, row) => row.identifier || row.parsed_identifier || '-' }, { field: 'recipient', headerName: 'Penerima', width: 200, renderCell: (params) => params.row.recipient?.identifier || params.row.recipient?.name_snapshot || '-' }, { field: 'status', headerName: 'Status', width: 140, renderCell: (params) => <StatusChip status={entryStatus(params.row)} /> }, { field: 'reason', headerName: 'Catatan', flex: 1, minWidth: 220, valueGetter: (value, row) => row.match_reason || row.reason || '-' }]} loading={jobsLoading} getRowId={(row) => row.bulk_upload_entry_id ?? row.id ?? row.entry_path ?? row.original_filename} pageSize={25} pageSizeOptions={[25, 50]} /><div className="mt-4"><h3 className="text-xs font-semibold text-zinc-600 mb-2">Riwayat Job</h3><CustomDataTable rows={jobs} columns={jobColumns} loading={jobsLoading} getRowId={(row) => jobId(row)} pageSize={10} pageSizeOptions={[10]} /></div></section>}
+            {selected && <section className="bg-white rounded-lg border border-zinc-200 p-4"><div className="mb-3"><h2 className="text-sm font-semibold text-zinc-800">Bulk Upload ZIP</h2><div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
+<p className="font-semibold">Format nama file</p>
+<p className="mt-1">Nama file harus memuat identifier penerima. Contoh: <code className="font-semibold">1222624-fanfanfirgiawan.pdf</code> akan dicocokkan ke penerima dengan identifier <code className="font-semibold">1222624</code>.</p>
+<p className="mt-1">Nama boleh memiliki prefix/suffix, misalnya <code className="font-semibold">KHS_1222624_FanFan.pdf</code>. Folder di dalam ZIP diabaikan.</p>
+<p className="mt-1"><strong>Aturan:</strong> ZIP maksimal 100 MB dan 1.000 entry; setiap file mengikuti batas ukuran upload dan ekstensi yang diizinkan: PDF, JPG/JPEG, PNG, DOC/DOCX, XLS/XLSX.</p>
+<p className="mt-1">Preview wajib diperiksa sebelum konfirmasi. Hanya <strong>Matched</strong> yang disimpan. <strong>Duplicate</strong> berarti beberapa file cocok ke penerima sama; <strong>Ambiguous</strong> berarti satu nama cocok ke beberapa penerima; <strong>Missing Penerima</strong> berarti penerima belum mendapat file; <strong>Invalid</strong> berarti file melanggar path, ukuran, ekstensi, atau MIME.</p>
+</div></div>{bulkError && <Alert severity="warning" sx={{ mb: 2, borderRadius: '0.5rem' }}>{bulkError}</Alert>}<div className="flex flex-wrap gap-2 mb-3"><Button component="label" variant="outlined" startIcon={<CloudUploadOutlined />} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>{bulkFile ? `${bulkFile.name} · ${bytes(bulkFile.size)}` : 'Pilih ZIP'}<input type="file" hidden accept=".zip,application/zip,application/x-zip-compressed" onChange={(event) => setBulkFile(event.target.files?.[0] || null)} /></Button><Button variant="contained" disabled={bulkUploading || !bulkFile} onClick={uploadBulkZip} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>{bulkUploading ? 'Mengunggah...' : 'Upload ZIP & Preview'}</Button><Button variant="outlined" disabled={!bulkJob} onClick={refreshBulkJob} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Refresh Job</Button><Button variant="contained" disabled={!canConfirm || actionLoading} onClick={confirmBulk} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Konfirmasi</Button><Button color="error" disabled={!bulkJob || BULK_ZIP_TERMINAL.includes(bulkJob.status) || actionLoading} onClick={cancelBulk} sx={buttonSx}>Batalkan</Button></div><div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">{[['Matched', summaryCount(bulkJob, 'matched_entries', 'matched')], ['Unmatched', summaryCount(bulkJob, 'unmatched_entries', 'unmatched')], ['Duplicate', summaryCount(bulkJob, 'duplicate_entries', 'duplicate')], ['Ambiguous', summaryCount(bulkJob, 'ambiguous_entries', 'ambiguous')], ['Invalid', summaryCount(bulkJob, 'invalid_entries', 'invalid')], ['Missing Penerima', summaryCount(bulkJob, 'missing_recipients', 'missing_recipients')], ['Replace', summaryCount(bulkJob, 'will_replace_entries', 'will_replace')]].map(([label, value]) => <div key={label} className="rounded-lg bg-zinc-50 border border-zinc-200 p-3"><span className="text-xs text-zinc-500">{label}</span><strong className="block text-lg text-zinc-800">{value}</strong></div>)}</div>{bulkJob && <Alert severity={bulkJob.status === 'preview_ready' ? 'success' : bulkJob.status === 'failed' ? 'error' : 'info'} sx={{ mb: 2, borderRadius: '0.5rem' }}>Job #{activeJobId} · {bulkJob.status}. Konfirmasi aktif hanya saat preview_ready dan backend mengizinkan.</Alert>}<CustomDataTable rows={entryRows} columns={[{ field: 'original_filename', headerName: 'File', flex: 1, minWidth: 220, valueGetter: (value, row) => row.original_filename || row.display_filename || row.entry_path || '-' }, { field: 'identifier', headerName: 'Identifier', width: 150, valueGetter: (value, row) => row.identifier || row.parsed_identifier || '-' }, { field: 'recipient', headerName: 'Penerima', width: 200, renderCell: (params) => params.row.recipient?.identifier || params.row.recipient?.name_snapshot || '-' }, { field: 'status', headerName: 'Status', width: 140, renderCell: (params) => <StatusChip status={entryStatus(params.row)} /> }, { field: 'reason', headerName: 'Catatan', flex: 1, minWidth: 220, valueGetter: (value, row) => row.match_reason || row.reason || '-' }]} loading={jobsLoading} getRowId={(row) => row.bulk_upload_entry_id ?? row.id ?? row.entry_path ?? row.original_filename} pageSize={25} pageSizeOptions={[25, 50]} /><div className="mt-4"><h3 className="text-xs font-semibold text-zinc-600 mb-2">Riwayat Job</h3><CustomDataTable rows={jobs} columns={jobColumns} loading={jobsLoading} getRowId={(row) => jobId(row)} pageSize={10} pageSizeOptions={[10]} /></div></section>}
             <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="lg"><DialogTitle className="!font-jakarta">{editing ? 'Edit Draft Distribusi' : 'Buat Distribusi'}</DialogTitle><DialogContent dividers className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><TextField size="small" label="Judul" value={form.title} onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))} required /><TextField className="md:col-span-2" size="small" multiline minRows={3} label="Deskripsi" value={form.description} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} /></div><TargetPicker key={targetPickerSession} value={targetInitialValue} onChange={handleTargetChange} initialRole={targetInitialValue?.target_role || 'mahasiswa'} /><div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 flex items-center justify-between gap-3 flex-wrap"><div className="text-xs text-zinc-600"><strong>Preview target</strong><p>{preview ? `${preview.total_valid ?? 0} valid · ${preview.total_invalid ?? 0} invalid · ${preview.total_targets ?? 0} total` : 'Belum divalidasi.'}</p></div><Button variant="outlined" disabled={previewLoading} onClick={previewTargets} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>{previewLoading ? 'Memvalidasi...' : 'Preview Target'}</Button></div></DialogContent><DialogActions><Button onClick={() => setDialogOpen(false)} sx={buttonSx}>Batal</Button><Button variant="contained" disabled={saving} onClick={saveDistribution} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Simpan Draft</Button></DialogActions></Dialog>
         </div>
     );

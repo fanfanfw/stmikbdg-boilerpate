@@ -187,7 +187,11 @@ export default function PersonalArchive() {
 
     const handleDownload = async (file) => {
         try {
-            await arsipApi.downloadFile(file);
+            if (file?.source_type === 'distribution') {
+                await arsipApi.downloadDistributionFile(file);
+            } else {
+                await arsipApi.downloadFile(file);
+            }
         } catch (err) {
             const formatted = await formatArsipError(err);
             customSwal.toast.error({ message: formatted.message });
@@ -576,7 +580,6 @@ export default function PersonalArchive() {
             field: 'source_type',
             headerName: 'Jenis Arsip',
             width: 300,
-            sortable: false,
             renderCell: (params) => params.row.row_type === 'file' ? (
                 <div className="flex items-center gap-1 whitespace-nowrap">
                     <Chip label={archiveSourceLabel(params.row.source_type)} size="small" variant="outlined" />

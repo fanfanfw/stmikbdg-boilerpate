@@ -23,6 +23,7 @@ const colorMap = {
     cancelled: 'error',
     expired: 'error',
     late: 'error',
+    revoked: 'error',
 
     draft: 'default',
     archived: 'default',

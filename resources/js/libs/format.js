@@ -76,6 +76,7 @@ export function statusLabel(status) {
             expired: 'Kedaluwarsa',
             active: 'Aktif',
             inactive: 'Nonaktif',
+            revoked: 'Dicabut',
             expired_scholarship: 'Berakhir',
             preview_ready: 'Siap preview',
             confirmed: 'Dikonfirmasi',
