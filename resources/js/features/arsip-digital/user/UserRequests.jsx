@@ -28,7 +28,9 @@ function assignmentOf(row) {
 }
 
 function assignmentFilesCount(assignment) {
-    return assignment?.files_count ?? assignment?.request_files?.length ?? assignment?.files?.length ?? 0;
+    if (assignment?.files_count != null) return assignment.files_count;
+    const files = assignment?.request_files ?? assignment?.files;
+    return Array.isArray(files) ? files.filter((item) => item?.is_current !== false).length : 0;
 }
 
 export default function UserRequests() {
