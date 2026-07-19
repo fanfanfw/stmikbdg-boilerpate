@@ -21,7 +21,6 @@ import {
     List,
     ListItem,
     ListItemText,
-    ListItemSecondaryAction,
 } from '@mui/material';
 import {
     CloudUploadOutlined,
@@ -97,6 +96,7 @@ export default function UserRequestDetail() {
     const [error, setError] = useState('');
     const [uploadOpen, setUploadOpen] = useState(false);
     const [reuseOpen, setReuseOpen] = useState(false);
+    const [replacingFile, setReplacingFile] = useState(null);
     const [selectedFile, setSelectedFile] = useState(null);
     const [uploadError, setUploadError] = useState('');
     const [personalFiles, setPersonalFiles] = useState([]);
@@ -113,9 +113,9 @@ export default function UserRequestDetail() {
     const allowedExtensions = requestAllowedExtensions.length ? requestAllowedExtensions : fallbackAllowedExtensions;
     const maxFileSizeMb = Number(request?.max_file_size_mb || fallbackSettings?.default_max_file_size_mb || safeUploadSettings.default_max_file_size_mb);
     const allowFileReuse = request?.allow_file_reuse ?? fallbackSettings?.allow_file_reuse ?? safeUploadSettings.allow_file_reuse;
-    const allowLateSubmission = request?.allow_late_submission ?? request?.allow_late_upload ?? request?.allow_late_submissions ?? false;
     const isOverdue = request?.deadline_at && assignment?.status !== 'approved' && new Date(request.deadline_at) < new Date();
-    const isLocked = ['closed', 'archived'].includes(request?.status) || assignment?.status === 'approved' || (isOverdue && !allowLateSubmission);
+    const isLocked = ['closed', 'archived'].includes(request?.status) || assignment?.status === 'approved' || (isOverdue && request?.close_after_deadline);
+    const canReplaceFile = !isLocked && ['waiting_verification', 'rejected'].includes(assignment?.status);
 
     const fetchDetail = async () => {
         setLoading(true);
@@ -167,9 +167,24 @@ export default function UserRequestDetail() {
     };
 
     const openUploadDialog = () => {
+        setReplacingFile(null);
         setSelectedFile(null);
         setUploadError('');
         setUploadOpen(true);
+    };
+
+    const openReplaceDialog = (requestFile) => {
+        setReplacingFile(requestFile);
+        setSelectedFile(null);
+        setUploadError('');
+        setUploadOpen(true);
+    };
+
+    const closeUploadDialog = () => {
+        setUploadOpen(false);
+        setReplacingFile(null);
+        setSelectedFile(null);
+        setUploadError('');
     };
 
     const handleUpload = async () => {
@@ -184,9 +199,12 @@ export default function UserRequestDetail() {
             const formData = new FormData();
             formData.append('file', selectedFile);
             formData.append('display_filename', selectedFile.name);
+            if (replacingFile?.request_file_id) {
+                formData.append('replace_request_file_id', replacingFile.request_file_id);
+            }
             await arsipApi.uploadAssignmentFile(assignment.assignment_id, formData);
-            customSwal.toast.success({ message: 'File berhasil diunggah' });
-            setUploadOpen(false);
+            customSwal.toast.success({ message: replacingFile ? 'File berhasil diganti' : 'File berhasil diunggah' });
+            closeUploadDialog();
             await fetchDetail();
         } catch (err) {
             const formatted = await formatArsipError(err);
@@ -197,7 +215,9 @@ export default function UserRequestDetail() {
         }
     };
 
-    const openReuseDialog = async () => {
+    const openReuseDialog = async (requestFile = null) => {
+        setReplacingFile(requestFile);
+        setUploadOpen(false);
         setSelectedReuseFileId(null);
         setReuseOpen(true);
         setFilesLoading(true);
@@ -212,13 +232,19 @@ export default function UserRequestDetail() {
         }
     };
 
+    const closeReuseDialog = () => {
+        setReuseOpen(false);
+        setReplacingFile(null);
+        setSelectedReuseFileId(null);
+    };
+
     const handleReuse = async () => {
         if (!selectedReuseFileId) return;
         setActionLoading(true);
         try {
-            await arsipApi.reuseAssignmentFile(assignment.assignment_id, selectedReuseFileId);
-            customSwal.toast.success({ message: 'File lama berhasil dipakai' });
-            setReuseOpen(false);
+            await arsipApi.reuseAssignmentFile(assignment.assignment_id, selectedReuseFileId, replacingFile?.request_file_id);
+            customSwal.toast.success({ message: replacingFile ? 'File berhasil diganti dari Arsip Saya' : 'File lama berhasil dipakai' });
+            closeReuseDialog();
             await fetchDetail();
         } catch (err) {
             const formatted = await formatArsipError(err);
@@ -314,7 +340,7 @@ export default function UserRequestDetail() {
                                     <Button
                                         variant="outlined"
                                         startIcon={<ContentCopyOutlined />}
-                                        onClick={openReuseDialog}
+                                        onClick={() => openReuseDialog()}
                                         disabled={isLocked || !assignment}
                                         sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}
                                     >
@@ -329,20 +355,35 @@ export default function UserRequestDetail() {
                                 {uploadedFiles.map((requestFile) => {
                                     const file = requestFile.file || requestFile;
                                     return (
-                                        <ListItem key={requestFile.request_file_id || file.file_id} divider>
-                                            <DescriptionOutlined sx={{ color: '#71717a', mr: 2 }} />
+                                        <ListItem
+                                            key={requestFile.request_file_id || file.file_id}
+                                            divider
+                                            sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 1.5, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}
+                                        >
+                                            <DescriptionOutlined sx={{ color: '#71717a', flexShrink: 0 }} />
                                             <ListItemText
                                                 primary={fileName(file)}
                                                 secondary={`${bytes(fileSize(file))} · ${dateTime(requestFile.created_at || file.created_at)}`}
-                                                primaryTypographyProps={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontWeight: 600, color: '#27272a' }}
-                                                secondaryTypographyProps={{ fontFamily: 'Plus Jakarta Sans, sans-serif', color: '#71717a' }}
+                                                primaryTypographyProps={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontWeight: 600, color: '#27272a', noWrap: true }}
+                                                secondaryTypographyProps={{ fontFamily: 'Plus Jakarta Sans, sans-serif', color: '#71717a', noWrap: true }}
+                                                sx={{ minWidth: 0, flex: '1 1 12rem', m: 0 }}
                                             />
-                                            <StatusChip status={requestFile.status || assignment?.status} />
-                                            <ListItemSecondaryAction>
-                                                <IconButton edge="end" onClick={() => handleDownload(requestFile)}>
-                                                    <DownloadOutlined />
+                                            <div className="flex items-center justify-end gap-2 shrink-0 max-sm:w-full max-sm:pl-10">
+                                                <StatusChip status={requestFile.status || assignment?.status} />
+                                                {canReplaceFile && (
+                                                    <Button
+                                                        size="small"
+                                                        variant="outlined"
+                                                        onClick={() => openReplaceDialog(requestFile)}
+                                                        sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46', whiteSpace: 'nowrap' }}
+                                                    >
+                                                        Ganti File
+                                                    </Button>
+                                                )}
+                                                <IconButton size="small" aria-label={`Unduh ${fileName(file)}`} onClick={() => handleDownload(requestFile)}>
+                                                    <DownloadOutlined fontSize="small" />
                                                 </IconButton>
-                                            </ListItemSecondaryAction>
+                                            </div>
                                         </ListItem>
                                     );
                                 })}
@@ -374,27 +415,45 @@ export default function UserRequestDetail() {
                 </aside>
             </div>
 
-            <Dialog open={uploadOpen} onClose={() => setUploadOpen(false)} fullWidth maxWidth="sm">
-                <DialogTitle className="!font-jakarta">Upload File Assignment</DialogTitle>
+            <Dialog open={uploadOpen} onClose={closeUploadDialog} fullWidth maxWidth="sm">
+                <DialogTitle className="!font-jakarta">{replacingFile ? 'Ganti File Assignment' : 'Upload File Assignment'}</DialogTitle>
                 <DialogContent dividers>
                     {uploadError && <Alert severity="error" sx={{ mb: 2, borderRadius: '0.5rem' }}>{uploadError}</Alert>}
+                    {replacingFile && (
+                        <Alert severity="info" sx={{ mb: 2, borderRadius: '0.5rem' }}>
+                            File <strong>{fileName(replacingFile.file || replacingFile)}</strong> akan diganti. Versi sebelumnya tetap tersimpan dalam riwayat.
+                        </Alert>
+                    )}
                     <Button component="label" variant="outlined" startIcon={<CloudUploadOutlined />} fullWidth sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46', py: 2 }}>
-                        {selectedFile ? selectedFile.name : 'Pilih File'}
+                        {selectedFile ? selectedFile.name : 'Pilih File Baru'}
                         <input type="file" hidden onChange={(event) => { setSelectedFile(event.target.files?.[0] || null); setUploadError(''); }} />
                     </Button>
+                    {replacingFile && allowFileReuse !== false && (
+                        <Button
+                            variant="text"
+                            startIcon={<ContentCopyOutlined />}
+                            fullWidth
+                            onClick={() => openReuseDialog(replacingFile)}
+                            sx={{ ...buttonSx, mt: 1, color: '#2563eb' }}
+                        >
+                            Pilih dari Arsip Saya
+                        </Button>
+                    )}
                     <p className="text-xs text-zinc-500 mt-2">
                         Maks. {maxFileSizeMb || '-'} MB · Ekstensi: {allowedExtensions.length ? allowedExtensions.join(', ') : 'Semua ekstensi'}
                         {fallbackSettingsUnavailable ? ' · Memakai batas aman karena aturan default tidak tersedia' : ''}
                     </p>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setUploadOpen(false)} sx={buttonSx}>Batal</Button>
-                    <Button onClick={handleUpload} variant="contained" disabled={actionLoading} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Upload</Button>
+                    <Button onClick={closeUploadDialog} sx={buttonSx}>Batal</Button>
+                    <Button onClick={handleUpload} variant="contained" disabled={actionLoading} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>
+                        {replacingFile ? 'Ganti File' : 'Upload'}
+                    </Button>
                 </DialogActions>
             </Dialog>
 
-            <Dialog open={reuseOpen} onClose={() => setReuseOpen(false)} fullWidth maxWidth="sm">
-                <DialogTitle className="!font-jakarta">Pakai File dari Arsip Personal</DialogTitle>
+            <Dialog open={reuseOpen} onClose={closeReuseDialog} fullWidth maxWidth="sm">
+                <DialogTitle className="!font-jakarta">{replacingFile ? 'Ganti dengan File dari Arsip Saya' : 'Pakai File dari Arsip Saya'}</DialogTitle>
                 <DialogContent dividers>
                     {filesLoading ? <CustomLoading /> : (
                         <List>
@@ -432,8 +491,10 @@ export default function UserRequestDetail() {
                     )}
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setReuseOpen(false)} sx={buttonSx}>Batal</Button>
-                    <Button onClick={handleReuse} variant="contained" disabled={actionLoading || !selectedReuseFileId} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Pakai File</Button>
+                    <Button onClick={closeReuseDialog} sx={buttonSx}>Batal</Button>
+                    <Button onClick={handleReuse} variant="contained" disabled={actionLoading || !selectedReuseFileId} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>
+                        {replacingFile ? 'Ganti File' : 'Pakai File'}
+                    </Button>
                 </DialogActions>
             </Dialog>
         </div>

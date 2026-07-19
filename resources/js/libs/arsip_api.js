@@ -85,8 +85,11 @@ export const arsipApi = {
     userRequestDetail: (id) => getJson(`/requests/${id}`),
     uploadAssignmentFile: (assignmentId, formData) =>
         uploadFormData(`/request-assignments/${assignmentId}/files/upload`, formData),
-    reuseAssignmentFile: (assignmentId, fileId) =>
-        postJson(`/request-assignments/${assignmentId}/files/reuse`, { file_id: fileId }),
+    reuseAssignmentFile: (assignmentId, fileId, replaceRequestFileId = null) =>
+        postJson(`/request-assignments/${assignmentId}/files/reuse`, {
+            file_id: fileId,
+            ...(replaceRequestFileId ? { replace_request_file_id: replaceRequestFileId } : {}),
+        }),
 
     // Scholarship Types
     scholarshipTypes: () => getJson('/admin/scholarship-types'),
