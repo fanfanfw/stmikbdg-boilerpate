@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { arsipApi } from '../../../libs/arsip_api';
@@ -119,7 +119,9 @@ export default function AdminRequests() {
     const [meta, setMeta] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [filters, setFilters] = useState({ search: '', status: '', target_role: '' });
+    const [draftFilters, setDraftFilters] = useState({ search: '', status: '', target_role: '' });
+    const [filters, setFilters] = useState(draftFilters);
+    const requestRef = useRef(0);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingRequest, setEditingRequest] = useState(null);
     const [form, setForm] = useState(emptyForm);
@@ -128,24 +130,27 @@ export default function AdminRequests() {
     const [preview, setPreview] = useState(null);
     const [previewLoading, setPreviewLoading] = useState(false);
 
-    const fetchRequests = async () => {
+    const fetchRequests = async (nextFilters = filters) => {
+        const loadId = ++requestRef.current;
         setLoading(true);
         setError('');
         try {
             const response = await arsipApi.adminRequests({
-                search: filters.search,
-                status: filters.status,
-                target_role: filters.target_role,
+                search: nextFilters.search,
+                status: nextFilters.status,
+                target_role: nextFilters.target_role,
             });
             const unwrapped = unwrapList(response);
+            if (loadId !== requestRef.current) return;
             setRows(unwrapped.data);
             setMeta(unwrapped.meta);
         } catch (err) {
+            if (loadId !== requestRef.current) return;
             const formatted = await formatArsipError(err);
             setError(formatted.message);
             customSwal.toast.error({ message: formatted.message });
         } finally {
-            setLoading(false);
+            if (loadId === requestRef.current) setLoading(false);
         }
     };
 
@@ -154,7 +159,12 @@ export default function AdminRequests() {
     }, []);
 
     const handleFilterChange = (key, value) => {
-        setFilters((prev) => ({ ...prev, [key]: value }));
+        setDraftFilters((prev) => ({ ...prev, [key]: value }));
+    };
+
+    const applyFilters = () => {
+        setFilters(draftFilters);
+        fetchRequests(draftFilters);
     };
 
     const openCreate = () => {
@@ -329,21 +339,21 @@ export default function AdminRequests() {
             {error && <Alert severity="error" sx={{ mb: 2, borderRadius: '0.5rem' }}>{error}</Alert>}
 
             <div className="bg-white rounded-lg border border-zinc-200 p-4 mb-4 flex flex-wrap gap-3">
-                <TextField size="small" placeholder="Cari request..." value={filters.search} onChange={(event) => handleFilterChange('search', event.target.value)} InputProps={{ startAdornment: <SearchOutlined sx={{ color: '#a1a1aa', mr: 1, fontSize: 18 }} /> }} sx={{ minWidth: 240 }} />
-                <TextField size="small" select label="Status" value={filters.status} onChange={(event) => handleFilterChange('status', event.target.value)} sx={{ minWidth: 160 }}>
+                <TextField size="small" placeholder="Cari request..." value={draftFilters.search} onChange={(event) => handleFilterChange('search', event.target.value)} InputProps={{ startAdornment: <SearchOutlined sx={{ color: '#a1a1aa', mr: 1, fontSize: 18 }} /> }} sx={{ minWidth: 240 }} />
+                <TextField size="small" select label="Status" value={draftFilters.status} onChange={(event) => handleFilterChange('status', event.target.value)} sx={{ minWidth: 160 }}>
                     <MenuItem value="">Semua</MenuItem>
                     <MenuItem value="draft">Draft</MenuItem>
                     <MenuItem value="published">Published</MenuItem>
                     <MenuItem value="closed">Closed</MenuItem>
                     <MenuItem value="archived">Archived</MenuItem>
                 </TextField>
-                <TextField size="small" select label="Target" value={filters.target_role} onChange={(event) => handleFilterChange('target_role', event.target.value)} sx={{ minWidth: 160 }}>
+                <TextField size="small" select label="Target" value={draftFilters.target_role} onChange={(event) => handleFilterChange('target_role', event.target.value)} sx={{ minWidth: 160 }}>
                     <MenuItem value="">Semua</MenuItem>
                     <MenuItem value="mahasiswa">Mahasiswa</MenuItem>
                     <MenuItem value="dosen">Dosen</MenuItem>
                 </TextField>
-                <Button variant="contained" startIcon={<SearchOutlined />} onClick={fetchRequests} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Terapkan Filter</Button>
-                <Button variant="outlined" startIcon={<RefreshOutlined />} onClick={fetchRequests} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Refresh</Button>
+                <Button variant="contained" startIcon={<SearchOutlined />} onClick={applyFilters} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Terapkan Filter</Button>
+                <Button variant="outlined" startIcon={<RefreshOutlined />} onClick={() => fetchRequests()} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Refresh</Button>
             </div>
 
 

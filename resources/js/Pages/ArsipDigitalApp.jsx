@@ -1,7 +1,38 @@
-import { useEffect, useState } from "react";
+import { Component, useEffect, useState } from "react";
 import { useUser } from "../contexts/UserContext";
 import MainLayout from "../layouts/MainLayout";
 import ArsipDigitalRoutes from "../features/arsip-digital/routes";
+
+class AppErrorBoundary extends Component {
+    constructor(props) {
+        super(props);
+        this.state = { error: null };
+    }
+
+    static getDerivedStateFromError(error) {
+        return { error };
+    }
+
+    componentDidCatch(error, info) {
+        console.error('Arsip Digital render error', error, info);
+    }
+
+    render() {
+        if (!this.state.error) return this.props.children;
+
+        return (
+            <div className="flex min-h-[60vh] items-center justify-center p-6 font-jakarta">
+                <div className="max-w-md text-center">
+                    <h1 className="text-lg font-semibold text-zinc-800">Halaman gagal ditampilkan</h1>
+                    <p className="mt-2 text-sm text-zinc-500">Terjadi kesalahan saat merender halaman. Muat ulang untuk memulihkan tampilan.</p>
+                    <button type="button" onClick={() => window.location.reload()} className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">
+                        Muat Ulang
+                    </button>
+                </div>
+            </div>
+        );
+    }
+}
 
 export default function ArsipDigitalApp() {
     const { setUserdata, setRole, setProfile, setLoadingUserdata } = useUser();
@@ -63,8 +94,10 @@ export default function ArsipDigitalApp() {
     }
 
     return (
-        <MainLayout>
-            <ArsipDigitalRoutes />
-        </MainLayout>
+        <AppErrorBoundary>
+            <MainLayout>
+                <ArsipDigitalRoutes />
+            </MainLayout>
+        </AppErrorBoundary>
     );
 }

@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import { DataGrid, GridToolbarColumnsButton, GridToolbarContainer, GridToolbarDensitySelector, GridToolbarQuickFilter } from '@mui/x-data-grid';
 import { Box, styled } from '@mui/material';
 
@@ -14,6 +15,24 @@ const StyledGridOverlay = styled('div')(() => ({
         fill: '#E8EAED',
     },
 }));
+
+function CustomToolbar({ search = true, column = true, density = true }) {
+    return (
+        <GridToolbarContainer className="w-full">
+            {search && (
+                <GridToolbarQuickFilter
+                    variant="outlined"
+                    size="small"
+                    color="primary"
+                    placeholder="Cari disini"
+                    debounceMs={300}
+                />
+            )}
+            {column && <GridToolbarColumnsButton />}
+            {density && <GridToolbarDensitySelector />}
+        </GridToolbarContainer>
+    );
+}
 
 function CustomNoRowsOverlay() {
     return (
@@ -48,6 +67,13 @@ function CustomNoRowsOverlay() {
     );
 }
 
+const defaultRows = [];
+const defaultColumns = [];
+const defaultPageSizeOptions = [5, 10, 25, 50];
+const defaultToolbar = { search: true, column: true, density: true };
+const defaultIsRowSelectable = () => true;
+const defaultRowSelect = { onChange: () => {}, value: [] };
+
 const defaultLocaleText = {
     noRowsLabel: 'Tidak ada data',
     MuiTablePagination: {
@@ -57,12 +83,12 @@ const defaultLocaleText = {
     },
 };
 
-export default function CustomDataTable({
-    rows = [],
-    columns = [],
+function CustomDataTable({
+    rows = defaultRows,
+    columns = defaultColumns,
     loading = false,
     pageSize = 5,
-    pageSizeOptions = [5, 10, 25, 50],
+    pageSizeOptions = defaultPageSizeOptions,
     paginationMode = 'client',
     rowCount,
     paginationModel,
@@ -70,18 +96,23 @@ export default function CustomDataTable({
     getRowId,
     checkbox = false,
     pagination = true,
-    toolbar = {
-        search: true,
-        column: true,
-        density: true,
-    },
-    isRowSelectable = () => true,
-    rowSelect = {
-        onChange: () => {},
-        value: [],
-    },
+    toolbar = defaultToolbar,
+    isRowSelectable = defaultIsRowSelectable,
+    rowSelect = defaultRowSelect,
     ...props
 }) {
+    const toolbarSlots = useMemo(() => ({
+        toolbar: CustomToolbar,
+        noRowsOverlay: CustomNoRowsOverlay,
+        noResultsOverlay: CustomNoRowsOverlay,
+    }), []);
+    const toolbarSlotProps = useMemo(() => ({
+        toolbar,
+        loadingOverlay: {
+            variant: 'skeleton',
+            noRowsVariant: 'skeleton',
+        },
+    }), [toolbar]);
     const paginationProps = paginationMode === 'server'
         ? {
             paginationMode: 'server',
@@ -112,33 +143,13 @@ export default function CustomDataTable({
             loading={loading}
             isRowSelectable={isRowSelectable}
             localeText={defaultLocaleText}
-            slots={{
-                toolbar: () => (
-                    <GridToolbarContainer className="w-full">
-                        {toolbar.search && (
-                            <GridToolbarQuickFilter
-                                variant="outlined"
-                                size="small"
-                                color="primary"
-                                placeholder="Cari disini"
-                            />
-                        )}
-                        {toolbar.column && <GridToolbarColumnsButton />}
-                        {toolbar.density && <GridToolbarDensitySelector />}
-                    </GridToolbarContainer>
-                ),
-                noRowsOverlay: CustomNoRowsOverlay,
-                noResultsOverlay: CustomNoRowsOverlay,
-            }}
-            slotProps={{
-                loadingOverlay: {
-                    variant: 'skeleton',
-                    noRowsVariant: 'skeleton',
-                },
-            }}
+            slots={toolbarSlots}
+            slotProps={toolbarSlotProps}
             onRowSelectionModelChange={rowSelect.onChange}
             rowSelectionModel={rowSelect.value}
             {...props}
         />
     );
 }
+
+export default memo(CustomDataTable);

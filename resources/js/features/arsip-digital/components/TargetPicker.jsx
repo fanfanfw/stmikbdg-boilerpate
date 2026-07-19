@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { arsipApi } from '../../../libs/arsip_api';
 import { formatArsipError } from '../../../libs/arsip_http';
 import { useTargetPicker } from '../hooks/useTargetPicker';
@@ -66,6 +66,21 @@ function targetQueryKey(filters) {
     return JSON.stringify(filters);
 }
 
+const TargetRow = memo(function TargetRow({ target, role, selected, invalid, invalidReason, disabled, onToggle }) {
+    const identifier = normalizeIdentifier(target);
+
+    return (
+        <tr className={invalid ? 'bg-red-50' : selected ? 'bg-blue-50' : 'bg-white'}>
+            <td className="px-3 py-2"><Checkbox size="small" checked={selected} disabled={disabled} onChange={() => onToggle(identifier)} /></td>
+            <td className="px-3 py-2 font-semibold text-zinc-800">{identifier || '-'}</td>
+            <td className="px-3 py-2 text-zinc-700">{target.name || target.name_snapshot || '-'}</td>
+            {role === 'mahasiswa' && <td className="px-3 py-2 text-zinc-700">{target.angkatan || target.angkatan_snapshot || '-'}</td>}
+            <td className="px-3 py-2 text-zinc-700">{invalid ? invalidReason : target.status || target.status_snapshot || '-'}</td>
+            <td className="px-3 py-2 text-zinc-700">{target.has_account === false ? 'Tidak' : 'Ya'}</td>
+        </tr>
+    );
+});
+
 function buildPayload(role, mode, filters, selectedIdentifiers) {
     const targetFilters = {};
 
@@ -86,17 +101,19 @@ function buildPayload(role, mode, filters, selectedIdentifiers) {
     };
 }
 
-export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa', disabled = false, invalidTargets = [] }) {
+function TargetPicker({ value, onChange, initialRole = 'mahasiswa', disabled = false, invalidTargets = [] }) {
     const [initialized, setInitialized] = useState(false);
+    const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
     const roleRef = useRef(initialRole);
+    const requestSequenceRef = useRef(0);
 
     const fetchTargets = useCallback(async (filters, page = filters?.page || 1) => {
         const role = roleRef.current || initialRole;
         const query = {
             role,
             search: filters.search,
-            angkatan: role === 'mahasiswa' ? csv(filters.angkatan)[0] || '' : '',
-            status: csv(filters.status)[0] || '',
+            angkatan: role === 'mahasiswa' ? csv(filters.angkatan) : [],
+            status: csv(filters.status),
             has_account: filters.has_account === '' ? undefined : filters.has_account === '1',
             page,
             per_page: filters.per_page || 25,
@@ -123,8 +140,15 @@ export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa
     roleRef.current = role;
     const filters = { ...defaultFilters, ...state.filters };
     const selectedIdentifiers = state.selectedIdentifiers;
-    const invalidIdentifiers = new Set((invalidTargets || []).map((target) => String(target.identifier || '').trim()).filter(Boolean));
-    const invalidReasonByIdentifier = Object.fromEntries((invalidTargets || []).map((target) => [String(target.identifier || '').trim(), target.reason || 'Target invalid.']));
+    const selectedIdentifierSet = useMemo(() => new Set(selectedIdentifiers), [selectedIdentifiers]);
+    const invalidIdentifiers = useMemo(
+        () => new Set((invalidTargets || []).map((target) => String(target.identifier || '').trim()).filter(Boolean)),
+        [invalidTargets],
+    );
+    const invalidReasonByIdentifier = useMemo(
+        () => Object.fromEntries((invalidTargets || []).map((target) => [String(target.identifier || '').trim(), target.reason || 'Target invalid.'])),
+        [invalidTargets],
+    );
     const currentPage = Number(state.targetMeta?.current_page ?? filters.page ?? 1);
     const lastPage = Number(state.targetMeta?.last_page ?? 1);
     const hasTargetMeta = Boolean(state.targetMeta);
@@ -134,11 +158,11 @@ export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa
     const pageIdentifiers = state.targets.map(normalizeIdentifier).filter(Boolean);
     const selectablePageIdentifiers = pageIdentifiers;
     const allPageSelected = selectablePageIdentifiers.length > 0
-        && selectablePageIdentifiers.every((identifier) => selectedIdentifiers.includes(identifier));
+        && selectablePageIdentifiers.every((identifier) => selectedIdentifierSet.has(identifier));
 
     const payload = useMemo(
-        () => buildPayload(role, state.mode, filters, selectedIdentifiers),
-        [role, state.mode, filters.search, filters.angkatan, filters.status, filters.has_account, selectedIdentifiers],
+        () => buildPayload(role, state.mode, appliedFilters, selectedIdentifiers),
+        [role, state.mode, appliedFilters, selectedIdentifiers],
     );
 
     useEffect(() => {
@@ -146,7 +170,9 @@ export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa
         const nextRole = ['mahasiswa', 'dosen'].includes(value?.target_role) ? value.target_role : initialRole;
         setRole(nextRole);
         setMode(value?.scope_type === 'specific' ? 'specific' : 'filter');
-        setFilters(normalizeInitialFilters(value, nextRole));
+        const initialFilters = normalizeInitialFilters(value, nextRole);
+        setFilters(initialFilters);
+        setAppliedFilters(initialFilters);
         if (Array.isArray(value?.target_identifiers)) {
             dispatch({ type: 'SELECT_ALL_FILTERED', payload: value.target_identifiers.map(String) });
         }
@@ -155,7 +181,7 @@ export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa
 
     useEffect(() => {
         if (!initialized) return;
-        onChange?.(payload);
+        startTransition(() => onChange?.(payload));
     }, [initialized, onChange, payload]);
 
     useEffect(() => {
@@ -165,23 +191,28 @@ export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa
     }, [dispatch, initialized, selectedIdentifiers, value?.scope_type, value?.target_identifiers]);
 
     const loadTargets = async (page = 1) => {
+        const requestSequence = ++requestSequenceRef.current;
         setLoading(true);
         setError(null);
         const nextFilters = { ...filters, page };
+        const requestedRole = role;
         setFilters(nextFilters);
         try {
             const response = await arsipApi.adminTargets({
-                role,
+                role: requestedRole,
                 search: nextFilters.search,
-                angkatan: role === 'mahasiswa' ? csv(nextFilters.angkatan)[0] || '' : '',
-                status: csv(nextFilters.status)[0] || '',
+                angkatan: requestedRole === 'mahasiswa' ? csv(nextFilters.angkatan) : [],
+                status: csv(nextFilters.status),
                 has_account: nextFilters.has_account === '' ? undefined : nextFilters.has_account === '1',
                 page,
                 per_page: nextFilters.per_page,
             });
+            if (requestSequence !== requestSequenceRef.current || requestedRole !== roleRef.current) return;
             const unwrapped = unwrapTargets(response);
             setTargets(unwrapped.data, unwrapped.meta, targetQueryKey(nextFilters));
+            setAppliedFilters(nextFilters);
         } catch (err) {
+            if (requestSequence !== requestSequenceRef.current) return;
             const formatted = await formatArsipError(err);
             setError(formatted.message);
         }
@@ -192,12 +223,18 @@ export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa
     }, [initialized, role]);
 
     const handleRoleChange = (nextRole) => {
+        requestSequenceRef.current += 1;
+        setLoading(false);
         setRole(nextRole);
         setMode('filter');
-        setFilters({ ...defaultFilters, angkatan: nextRole === 'mahasiswa' ? filters.angkatan : '' });
+        const nextFilters = { ...defaultFilters, angkatan: nextRole === 'mahasiswa' ? filters.angkatan : '' };
+        setFilters(nextFilters);
+        setAppliedFilters(nextFilters);
     };
 
     const handleFilterChange = (key, nextValue) => {
+        requestSequenceRef.current += 1;
+        setLoading(false);
         setFilters({ ...filters, [key]: nextValue, page: 1 });
     };
 
@@ -211,10 +248,10 @@ export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa
         dispatch({ type: 'SELECT_ALL_FILTERED', payload: selectedIdentifiers.filter((identifier) => !pageIdentifiers.includes(identifier)) });
     };
 
-    const handleToggleIdentifier = (identifier) => {
+    const handleToggleIdentifier = useCallback((identifier) => {
         setMode('specific');
         toggleIdentifier(identifier);
-    };
+    }, [setMode, toggleIdentifier]);
 
     const handleClearSelection = () => {
         setMode('specific');
@@ -305,14 +342,16 @@ export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa
                         {state.targets.map((target) => {
                             const identifier = normalizeIdentifier(target);
                             return (
-                                <tr key={identifier} className={invalidIdentifiers.has(identifier) ? 'bg-red-50' : selectedIdentifiers.includes(identifier) ? 'bg-blue-50' : 'bg-white'}>
-                                    <td className="px-3 py-2"><Checkbox size="small" checked={selectedIdentifiers.includes(identifier)} disabled={disabled} onChange={() => handleToggleIdentifier(identifier)} /></td>
-                                    <td className="px-3 py-2 font-semibold text-zinc-800">{identifier || '-'}</td>
-                                    <td className="px-3 py-2 text-zinc-700">{target.name || target.name_snapshot || '-'}</td>
-                                    {role === 'mahasiswa' && <td className="px-3 py-2 text-zinc-700">{target.angkatan || target.angkatan_snapshot || '-'}</td>}
-                                    <td className="px-3 py-2 text-zinc-700">{invalidIdentifiers.has(identifier) ? invalidReasonByIdentifier[identifier] : target.status || target.status_snapshot || '-'}</td>
-                                    <td className="px-3 py-2 text-zinc-700">{target.has_account === false ? 'Tidak' : 'Ya'}</td>
-                                </tr>
+                                <TargetRow
+                                    key={identifier}
+                                    target={target}
+                                    role={role}
+                                    selected={selectedIdentifierSet.has(identifier)}
+                                    invalid={invalidIdentifiers.has(identifier)}
+                                    invalidReason={invalidReasonByIdentifier[identifier]}
+                                    disabled={disabled}
+                                    onToggle={handleToggleIdentifier}
+                                />
                             );
                         })}
                         {!state.loading && state.targets.length === 0 && (
@@ -332,3 +371,5 @@ export default function TargetPicker({ value, onChange, initialRole = 'mahasiswa
         </section>
     );
 }
+
+export default memo(TargetPicker);

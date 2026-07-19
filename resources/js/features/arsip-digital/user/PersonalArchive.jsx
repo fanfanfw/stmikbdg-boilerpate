@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { arsipApi } from '../../../libs/arsip_api';
 import { formatArsipError } from '../../../libs/arsip_http';
 import { archiveSourceLabel, dateTime, bytes } from '../../../libs/format';
@@ -117,8 +117,10 @@ export default function PersonalArchive() {
     const [historyVersions, setHistoryVersions] = useState([]);
     const [historyLoading, setHistoryLoading] = useState(false);
     const [historyError, setHistoryError] = useState('');
+    const filesRequestRef = useRef(0);
 
     const fetchFiles = useCallback(async () => {
+        const requestId = ++filesRequestRef.current;
         setListData((prev) => ({ ...prev, loading: true }));
         try {
             const params = {
@@ -126,11 +128,14 @@ export default function PersonalArchive() {
                 per_page: filters.per_page,
             };
             if (filters.search) params.search = filters.search;
+            if (filters.category_id) params.category_id = filters.category_id;
             const res = await arsipApi.files(params);
             const unwrapped = unwrapListResponse(res, 'files');
+            if (requestId !== filesRequestRef.current) return;
             setListData({ data: unwrapped.data, meta: unwrapped.meta, loading: false });
             setSelectedFileIds([]);
         } catch (err) {
+            if (requestId !== filesRequestRef.current) return;
             const formatted = await formatArsipError(err);
             customSwal.toast.error({ message: formatted.message });
             setListData((prev) => ({ ...prev, loading: false }));
@@ -264,12 +269,15 @@ export default function PersonalArchive() {
     };
 
     const openFolder = (category) => {
-        setActiveCategoryId(categoryId(category));
+        const id = categoryId(category);
+        setActiveCategoryId(id);
+        setFilters((prev) => ({ ...prev, category_id: id, page: 0 }));
         setSelectedFileIds([]);
     };
 
     const closeFolder = () => {
         setActiveCategoryId('');
+        setFilters((prev) => ({ ...prev, category_id: '', page: 0 }));
         setSelectedFileIds([]);
     };
 
@@ -370,24 +378,41 @@ export default function PersonalArchive() {
     const quotaRemainingBytes = settings?.personal_remaining_bytes ?? null;
     const quotaPercent = Math.min(100, Number(settings?.personal_usage_percent || 0));
     const quotaFull = quotaRemainingBytes !== null && quotaRemainingBytes <= 0;
-    const personalCategories = categories.filter((category) => category.category_type === 'personal');
-    const activeCategory = personalCategories.find((category) => String(categoryId(category)) === String(activeCategoryId));
+    const personalCategories = useMemo(
+        () => categories.filter((category) => category.category_type === 'personal'),
+        [categories],
+    );
+    const activeCategory = useMemo(
+        () => personalCategories.find((category) => String(categoryId(category)) === String(activeCategoryId)),
+        [personalCategories, activeCategoryId],
+    );
     const visibleFiles = useMemo(() => listData.data.filter((file) => {
         const currentCategoryId = file.category_id ?? file.category?.category_id ?? file.category?.id ?? '';
         return activeCategoryId ? String(currentCategoryId) === String(activeCategoryId) : !currentCategoryId;
     }), [listData.data, activeCategoryId]);
-    const tableRows = activeCategoryId
-        ? visibleFiles.map((file) => ({ ...file, row_type: 'file' }))
-        : [
-             ...personalCategories.map((category) => ({
+    const tableRows = useMemo(() => {
+        const counts = new Map();
+        listData.data.forEach((file) => {
+            const id = String(file.category_id ?? file.category?.category_id ?? file.category?.id ?? '');
+            counts.set(id, (counts.get(id) || 0) + 1);
+        });
+        const fileRows = visibleFiles.map((file) => ({ ...file, row_type: 'file' }));
+        if (activeCategoryId) return fileRows;
+        return [
+            ...personalCategories.map((category) => ({
                 ...category,
                 row_type: 'folder',
                 row_id: `folder-${categoryId(category)}`,
-                files_count: listData.data.filter((file) => String(file.category_id ?? file.category?.category_id ?? file.category?.id ?? '') === String(categoryId(category))).length,
+                files_count: category.files_count ?? counts.get(String(categoryId(category))) ?? 0,
             })),
-            ...visibleFiles.map((file) => ({ ...file, row_type: 'file' })),
+            ...fileRows,
         ];
-    const selectedFiles = visibleFiles.filter((file) => selectedFileIds.includes(fileId(file)));
+    }, [activeCategoryId, listData.data, personalCategories, visibleFiles]);
+    const selectedFileIdSet = useMemo(() => new Set(selectedFileIds), [selectedFileIds]);
+    const selectedFiles = useMemo(
+        () => visibleFiles.filter((file) => selectedFileIdSet.has(fileId(file))),
+        [visibleFiles, selectedFileIdSet],
+    );
     const canMoveSelection = selectedFiles.length > 0 && selectedFiles.every(canMoveFile);
 
     const validateFile = (file) => {
@@ -524,7 +549,7 @@ export default function PersonalArchive() {
             renderCell: (params) => params.row.row_type === 'file' ? (
                 <Checkbox
                     size="small"
-                    checked={selectedFileIds.includes(fileId(params.row))}
+                    checked={selectedFileIdSet.has(fileId(params.row))}
                     onChange={() => toggleFileSelection(params.row)}
                 />
             ) : null,
@@ -707,9 +732,11 @@ export default function PersonalArchive() {
                     rows={tableRows}
                     columns={columns}
                     loading={listData.loading}
-                    paginationMode="client"
+                    paginationMode="server"
+                    rowCount={(listData.meta?.total ?? listData.data.length) + (activeCategoryId ? 0 : personalCategories.length)}
+                    paginationModel={{ page: filters.page, pageSize: filters.per_page }}
+                    onPaginationModelChange={handlePaginationChange}
                     getRowId={(row) => row.row_type === 'folder' ? row.row_id : fileId(row)}
-                    pageSize={filters.per_page}
                     pageSizeOptions={[10, 25, 50]}
                 />
             </div>

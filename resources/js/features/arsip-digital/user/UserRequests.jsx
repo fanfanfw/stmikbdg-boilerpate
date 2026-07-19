@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { arsipApi } from '../../../libs/arsip_api';
 import { formatArsipError } from '../../../libs/arsip_http';
@@ -50,7 +50,7 @@ export default function UserRequests() {
         per_page: 10,
     });
 
-    const fetchRequests = async () => {
+    const fetchRequests = useCallback(async () => {
         setListData((prev) => ({ ...prev, loading: true, error: null }));
         try {
             const response = await arsipApi.userRequests();
@@ -64,11 +64,11 @@ export default function UserRequests() {
                 message: formatted.message,
             });
         }
-    };
+    }, []);
 
     useEffect(() => {
         fetchRequests();
-    }, []);
+    }, [fetchRequests]);
 
     const isPastDeadline = (deadline, assignmentStatus) => {
         if (!deadline) return false;
@@ -76,9 +76,12 @@ export default function UserRequests() {
         return new Date(deadline) < new Date();
     };
 
-    const pendingAssignments = listData.data.filter((row) => assignmentOf(row)?.status === 'not_submitted');
+    const pendingAssignments = useMemo(
+        () => listData.data.filter((row) => assignmentOf(row)?.status === 'not_submitted'),
+        [listData.data],
+    );
 
-    const filteredData = listData.data.filter((row) => {
+    const filteredData = useMemo(() => listData.data.filter((row) => {
         const matchesSearch =
             !filters.search ||
             row.title.toLowerCase().includes(filters.search.toLowerCase());
@@ -88,22 +91,13 @@ export default function UserRequests() {
             assignmentOf(row)?.status === filters.status;
 
         return matchesSearch && matchesStatus;
-    });
+    }), [listData.data, filters.search, filters.status]);
 
-    const paginatedData = filteredData.slice(
-        filters.page * filters.per_page,
-        filters.page * filters.per_page + filters.per_page,
-    );
+    const handleFilterChange = useCallback((key, value) => {
+        setFilters((prev) => ({ ...prev, [key]: value }));
+    }, []);
 
-    const handleFilterChange = (key, value) => {
-        setFilters((prev) => ({ ...prev, [key]: value, page: 0 }));
-    };
-
-    const handlePaginationChange = (model) => {
-        setFilters((prev) => ({ ...prev, page: model.page, per_page: model.pageSize }));
-    };
-
-    const columns = [
+    const columns = useMemo(() => [
         {
             field: 'title',
             headerName: 'Judul Permintaan',
@@ -202,7 +196,7 @@ export default function UserRequests() {
                 </Button>
             ),
         },
-    ];
+    ], [navigate]);
 
     if (listData.loading) {
         return <CustomLoading />;
@@ -320,13 +314,10 @@ export default function UserRequests() {
                     </div>
                 ) : (
                     <CustomDataTable
-                        rows={paginatedData}
+                        rows={filteredData}
                         columns={columns}
                         getRowId={(row) => row.request_id}
-                        paginationMode="server"
-                        rowCount={filteredData.length}
-                        paginationModel={{ page: filters.page, pageSize: filters.per_page }}
-                        onPaginationModelChange={handlePaginationChange}
+                        pageSize={filters.per_page}
                         pageSizeOptions={[10, 25, 50]}
                         onRowClick={(params) => navigate(`/home/permintaan/${params.row.request_id}`)}
                         autoHeight

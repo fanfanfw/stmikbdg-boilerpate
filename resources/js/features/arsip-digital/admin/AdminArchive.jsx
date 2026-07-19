@@ -168,18 +168,29 @@ export default function AdminArchive() {
         const currentCategoryId = file.category_id ?? file.category?.category_id ?? file.category?.id ?? '';
         return activeCategoryId ? String(currentCategoryId) === String(activeCategoryId) : !currentCategoryId;
     }), [files, activeCategoryId]);
-    const tableRows = activeCategoryId
-        ? visibleFiles.map((file) => ({ ...file, row_type: 'file' }))
-        : [
+    const tableRows = useMemo(() => {
+        const counts = new Map();
+        files.forEach((file) => {
+            const id = String(file.category_id ?? file.category?.category_id ?? file.category?.id ?? '');
+            counts.set(id, (counts.get(id) || 0) + 1);
+        });
+        const fileRows = visibleFiles.map((file) => ({ ...file, row_type: 'file' }));
+        if (activeCategoryId) return fileRows;
+        return [
             ...categories.map((category) => ({
                 ...category,
                 row_type: 'folder',
                 row_id: `folder-${categoryId(category)}`,
-                files_count: files.filter((file) => String(file.category_id ?? file.category?.category_id ?? file.category?.id ?? '') === String(categoryId(category))).length,
+                files_count: category.files_count ?? counts.get(String(categoryId(category))) ?? 0,
             })),
-            ...visibleFiles.map((file) => ({ ...file, row_type: 'file' })),
+            ...fileRows,
         ];
-    const selectedFiles = visibleFiles.filter((file) => selectedFileIds.includes(fileId(file)));
+    }, [activeCategoryId, categories, files, visibleFiles]);
+    const selectedFileIdSet = useMemo(() => new Set(selectedFileIds), [selectedFileIds]);
+    const selectedFiles = useMemo(
+        () => visibleFiles.filter((file) => selectedFileIdSet.has(fileId(file))),
+        [visibleFiles, selectedFileIdSet],
+    );
 
     const openCategoryModal = () => {
         setCategoryForm({ name: '', description: '' });
@@ -370,7 +381,7 @@ export default function AdminArchive() {
     ];
 
     const fileColumns = [
-        { field: 'select', headerName: '', width: 56, sortable: false, filterable: false, renderHeader: () => <Checkbox size="small" disabled={!visibleFiles.length} checked={visibleFiles.length > 0 && selectedFileIds.length === visibleFiles.length} indeterminate={selectedFileIds.length > 0 && selectedFileIds.length < visibleFiles.length} onChange={(event) => toggleAllVisibleFiles(event.target.checked)} />, renderCell: (params) => params.row.row_type === 'file' ? <Checkbox size="small" checked={selectedFileIds.includes(fileId(params.row))} onChange={() => toggleFileSelection(params.row)} /> : null },
+        { field: 'select', headerName: '', width: 56, sortable: false, filterable: false, renderHeader: () => <Checkbox size="small" disabled={!visibleFiles.length} checked={visibleFiles.length > 0 && selectedFileIds.length === visibleFiles.length} indeterminate={selectedFileIds.length > 0 && selectedFileIds.length < visibleFiles.length} onChange={(event) => toggleAllVisibleFiles(event.target.checked)} />, renderCell: (params) => params.row.row_type === 'file' ? <Checkbox size="small" checked={selectedFileIdSet.has(fileId(params.row))} onChange={() => toggleFileSelection(params.row)} /> : null },
         { field: 'display_filename', headerName: activeCategory ? `Isi ${activeCategory.name}` : 'File', flex: 1, minWidth: 220, renderCell: (params) => params.row.row_type === 'folder' ? <button type="button" className="flex items-center gap-2 font-semibold text-blue-700 hover:underline" onClick={() => openFolder(params.row)}><FolderOutlined fontSize="small" />{params.row.name}<span className="text-xs font-normal text-zinc-500">({params.row.files_count || 0})</span></button> : <span className="flex items-center gap-2"><InsertDriveFileOutlined fontSize="small" />{params.row.display_filename || params.row.original_filename || params.row.filename || '-'}</span> },
         { field: 'source_type', headerName: 'Jenis Arsip', width: 300, sortable: false, renderCell: (params) => params.row.row_type === 'file' ? <div className="flex items-center gap-1 whitespace-nowrap"><Chip label={archiveSourceLabel(params.row.source_type)} size="small" variant="outlined" />{['personal', 'admin_upload'].includes(params.row.source_type) && (params.row.request_file || params.row.requestFile) && <Chip label="Dipakai di Permintaan" size="small" color="warning" variant="outlined" />}</div> : '-' },
         { field: 'extension', headerName: 'Ext', width: 80, renderCell: (params) => params.row.row_type === 'file' ? (params.row.extension || '-') : '-' },
