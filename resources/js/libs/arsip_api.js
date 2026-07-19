@@ -113,6 +113,8 @@ export const arsipApi = {
     previewDistributionTargets: (payload) =>
         postJson('/admin/distributions/preview-targets', payload),
     publishDistribution: (id) => postJson(`/admin/distributions/${id}/publish`),
+    withdrawDistribution: (id, reason) => postJson(`/admin/distributions/${id}/withdraw`, { reason }),
+    createDistributionCorrection: (id) => postJson(`/admin/distributions/${id}/corrections`),
     distributionRecipients: (id, params) =>
         getJson(`/admin/distributions/${id}/recipients`, params),
     uploadRecipientFile: (recipientId, formData) =>

@@ -62,9 +62,10 @@ export default function UserDistributions() {
         } catch (err) {
             const formatted = await formatArsipError(err);
             customSwal.toast.error({
-                title: 'Gagal mengunduh',
+                title: err?.response?.status === 410 ? 'Berkas tidak tersedia' : 'Gagal mengunduh',
                 message: formatted.message,
             });
+            if (err?.response?.status === 410) await fetchDistributions();
         }
     };
 
