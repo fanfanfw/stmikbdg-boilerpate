@@ -43,6 +43,17 @@ export function firstArray(data, keys) {
     return [];
 }
 
+export function archiveSourceLabel(sourceType) {
+    return (
+        {
+            personal: 'Arsip Personal',
+            admin_upload: 'Upload Admin',
+            request: 'Permintaan Berkas',
+            distribution: 'Berkas Kampus',
+        }[sourceType] || sourceType || '-'
+    );
+}
+
 export function statusLabel(status) {
     return (
         {

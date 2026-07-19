@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { arsipApi } from '../../../libs/arsip_api';
 import { formatArsipError } from '../../../libs/arsip_http';
-import { dateTime, bytes } from '../../../libs/format';
+import { archiveSourceLabel, dateTime, bytes } from '../../../libs/format';
 import { customSwal } from '../../../components/CustomSwal';
 import PageHeader from '../../../components/PageHeader';
 import StatusChip from '../../../components/StatusChip';
@@ -18,6 +18,7 @@ import {
     Alert,
     Tooltip,
     Checkbox,
+    Chip,
 } from '@mui/material';
 import {
     CloudUploadOutlined,
@@ -28,6 +29,7 @@ import {
     InsertDriveFileOutlined,
     ArrowBackOutlined,
     DriveFileMoveOutlined,
+    HistoryOutlined,
 } from '@mui/icons-material';
 
 const initialFilters = {
@@ -110,6 +112,11 @@ export default function PersonalArchive() {
     const [moveCategoryId, setMoveCategoryId] = useState('');
     const [moveError, setMoveError] = useState('');
     const [moving, setMoving] = useState(false);
+    const [historyOpen, setHistoryOpen] = useState(false);
+    const [historyFile, setHistoryFile] = useState(null);
+    const [historyVersions, setHistoryVersions] = useState([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
+    const [historyError, setHistoryError] = useState('');
 
     const fetchFiles = useCallback(async () => {
         setListData((prev) => ({ ...prev, loading: true }));
@@ -180,6 +187,51 @@ export default function PersonalArchive() {
             const formatted = await formatArsipError(err);
             customSwal.toast.error({ message: formatted.message });
         }
+    };
+
+    const fetchHistory = async (file) => {
+        setHistoryLoading(true);
+        setHistoryError('');
+        try {
+            const res = await arsipApi.fileVersions(fileId(file));
+            setHistoryVersions(unwrapListResponse(res, 'versions').data);
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            setHistoryError(formatted.message);
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+
+    const openHistory = async (file) => {
+        setHistoryFile(file);
+        setHistoryVersions([]);
+        setHistoryOpen(true);
+        await fetchHistory(file);
+    };
+
+    const closeHistory = () => {
+        setHistoryOpen(false);
+        setHistoryFile(null);
+        setHistoryVersions([]);
+        setHistoryError('');
+    };
+
+    const handleDeleteHistory = (version) => {
+        customSwal.question({
+            title: 'Hapus versi lama?',
+            message: `Versi ${version.version_number} dari "${version.display_filename}" akan dihapus permanen dan kuota akan dikembalikan.`,
+            callback: async () => {
+                try {
+                    await arsipApi.deleteFile(fileId(version), 'Versi lama dihapus oleh pengguna');
+                    customSwal.toast.success({ message: 'Versi lama berhasil dihapus permanen' });
+                    await Promise.all([fetchHistory(historyFile), fetchSettings(), fetchFiles()]);
+                } catch (err) {
+                    const formatted = await formatArsipError(err);
+                    customSwal.toast.error({ message: formatted.message });
+                }
+            },
+        });
     };
 
     const handleDelete = (file) => {
@@ -496,6 +548,20 @@ export default function PersonalArchive() {
             ),
         },
         {
+            field: 'source_type',
+            headerName: 'Jenis Arsip',
+            width: 300,
+            sortable: false,
+            renderCell: (params) => params.row.row_type === 'file' ? (
+                <div className="flex items-center gap-1 whitespace-nowrap">
+                    <Chip label={archiveSourceLabel(params.row.source_type)} size="small" variant="outlined" />
+                    {['personal', 'admin_upload'].includes(params.row.source_type) && (params.row.request_file || params.row.requestFile) && (
+                        <Chip label="Dipakai di Permintaan" size="small" color="warning" variant="outlined" />
+                    )}
+                </div>
+            ) : '-',
+        },
+        {
             field: 'file_size',
             headerName: 'Ukuran',
             width: 100,
@@ -516,7 +582,7 @@ export default function PersonalArchive() {
         {
             field: 'actions',
             headerName: 'Aksi',
-            width: 140,
+            width: 170,
             sortable: false,
             filterable: false,
             renderCell: (params) => params.row.row_type === 'file' ? (
@@ -526,6 +592,13 @@ export default function PersonalArchive() {
                             <DownloadOutlined fontSize="small" />
                         </IconButton>
                     </Tooltip>
+                    {['personal', 'admin_upload'].includes(params.row.source_type) && (
+                        <Tooltip title="Riwayat versi">
+                            <IconButton size="small" color="inherit" aria-label="Riwayat versi file" onClick={() => openHistory(params.row)}>
+                                <HistoryOutlined fontSize="small" />
+                            </IconButton>
+                        </Tooltip>
+                    )}
                     {params.row.status === 'deleted' ? (
                         <Tooltip title="Pulihkan">
                             <IconButton size="small" color="success" aria-label="Pulihkan file" disabled={!fileId(params.row)} onClick={() => handleRestore(params.row)}>
@@ -640,6 +713,55 @@ export default function PersonalArchive() {
                     pageSizeOptions={[10, 25, 50]}
                 />
             </div>
+
+            <Dialog open={historyOpen} onClose={closeHistory} maxWidth="md" fullWidth>
+                <DialogTitle sx={{ fontSize: '1rem', fontWeight: 600 }}>
+                    Riwayat Versi — {historyFile?.display_filename || '-'}
+                </DialogTitle>
+                <DialogContent dividers>
+                    {historyError && <Alert severity="error" sx={{ mb: 2 }}>{historyError}</Alert>}
+                    {historyLoading ? (
+                        <p className="py-8 text-center text-sm text-zinc-500">Memuat riwayat...</p>
+                    ) : historyVersions.length === 0 ? (
+                        <p className="py-8 text-center text-sm text-zinc-500">Belum ada riwayat versi.</p>
+                    ) : (
+                        <div className="divide-y divide-zinc-200">
+                            {historyVersions.map((version) => (
+                                <div key={fileId(version)} className="flex items-center gap-3 py-3 max-sm:flex-wrap">
+                                    <InsertDriveFileOutlined sx={{ color: '#71717a', flexShrink: 0 }} />
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-semibold text-zinc-800">
+                                            Versi {version.version_number} · {version.display_filename}
+                                        </p>
+                                        <p className="text-xs text-zinc-500">
+                                            {bytes(version.file_size_bytes)} · {dateTime(version.created_at)}
+                                        </p>
+                                    </div>
+                                    <div className="flex shrink-0 flex-wrap items-center gap-2 max-sm:w-full max-sm:pl-9">
+                                        <Chip label={archiveSourceLabel(version.source_type)} size="small" variant="outlined" />
+                                        <StatusChip status={version.status} />
+                                        <Tooltip title="Download versi ini">
+                                            <IconButton size="small" color="primary" onClick={() => handleDownload(version)}>
+                                                <DownloadOutlined fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                        {!version.is_current && version.status === 'replaced' && (
+                                            <Tooltip title="Hapus permanen versi lama">
+                                                <IconButton size="small" color="error" onClick={() => handleDeleteHistory(version)}>
+                                                    <DeleteOutlined fontSize="small" />
+                                                </IconButton>
+                                            </Tooltip>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </DialogContent>
+                <DialogActions sx={{ px: 3, py: 2 }}>
+                    <Button onClick={closeHistory} size="small" sx={{ textTransform: 'none' }}>Tutup</Button>
+                </DialogActions>
+            </Dialog>
 
             <Dialog open={moveOpen} onClose={closeMoveDialog} maxWidth="xs" fullWidth>
                 <DialogTitle sx={{ fontSize: '1rem', fontWeight: 600 }}>Pindahkan File</DialogTitle>
