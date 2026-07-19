@@ -245,7 +245,7 @@ export default function UserRequestDetail() {
                 title={request?.title || 'Detail Permintaan'}
                 subtitle="Detail permintaan berkas dan file yang sudah Anda kirim"
                 breadcrumbs={[
-                    { label: 'Permintaan Berkas', href: '/permintaan' },
+                    { label: 'Permintaan Berkas', href: '/home/permintaan' },
                     { label: request?.title || 'Detail Permintaan' },
                 ]}
                 actions={

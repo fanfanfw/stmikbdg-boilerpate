@@ -51,7 +51,7 @@ export default function AdminDashboard() {
             title: 'Permintaan Berkas',
             value: valueFrom(summary, ['requests_count', 'total_requests', 'request_count']),
             subtitle: 'Kelola request, target, dan verifikasi berkas.',
-            href: '/permintaan',
+            href: '/home/permintaan',
             icon: <DescriptionOutlined sx={{ color: '#2563eb' }} />,
         },
         {

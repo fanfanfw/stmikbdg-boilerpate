@@ -43,7 +43,7 @@ function assignmentOf(row) {
 }
 
 function activeRequestCount(requests) {
-    return requests.filter((item) => ['not_submitted', 'waiting_verification', 'pending', 'rejected'].includes(assignmentOf(item)?.status)).length;
+    return requests.filter((item) => assignmentOf(item)?.status === 'not_submitted').length;
 }
 
 function Footer() {

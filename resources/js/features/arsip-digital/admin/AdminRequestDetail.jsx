@@ -394,7 +394,7 @@ export default function AdminRequestDetail() {
             <PageHeader
                 title={request?.title || 'Detail Permintaan'}
                 subtitle="Kelola assignment, progres, verifikasi, upload admin, dan file request."
-                breadcrumbs={[{ label: 'Permintaan Berkas', href: '/permintaan' }, { label: request?.title || 'Detail' }]}
+                breadcrumbs={[{ label: 'Permintaan Berkas', href: '/home/permintaan' }, { label: request?.title || 'Detail' }]}
                 actions={
                     <>
                         <Button variant="outlined" startIcon={<ArrowBackOutlined />} onClick={() => navigate('/home/permintaan')} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Kembali</Button>

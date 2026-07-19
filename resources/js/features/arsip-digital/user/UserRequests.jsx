@@ -74,10 +74,7 @@ export default function UserRequests() {
         return new Date(deadline) < new Date();
     };
 
-    const pendingAssignments = listData.data.filter((row) => {
-        const assignment = assignmentOf(row);
-        return ['not_submitted', 'waiting_verification', 'pending', 'rejected'].includes(assignment?.status);
-    });
+    const pendingAssignments = listData.data.filter((row) => assignmentOf(row)?.status === 'not_submitted');
 
     const filteredData = listData.data.filter((row) => {
         const matchesSearch =

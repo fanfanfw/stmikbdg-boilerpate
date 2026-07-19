@@ -1,7 +1,7 @@
 export const adminNavigation = [
     { label: 'Dashboard', name: 'admin.dashboard', path: '/' },
     { label: 'Arsip Pengguna', name: 'admin.archive', path: '/arsip-pengguna' },
-    { label: 'Permintaan Berkas', name: 'admin.requests', path: '/permintaan' },
+    { label: 'Permintaan Berkas', name: 'admin.requests', path: '/home/permintaan' },
     { label: 'Distribusi Berkas', name: 'admin.distributions', path: '/distribusi' },
     { label: 'Beasiswa', name: 'admin.scholarships', path: '/beasiswa' },
     { label: 'Export ZIP', name: 'admin.exports', path: '/export' },
@@ -12,7 +12,7 @@ export const adminNavigation = [
 export const userNavigation = [
     { label: 'Dashboard', name: 'user.dashboard', path: '/' },
     { label: 'Arsip Saya', name: 'user.archive', path: '/arsip-saya' },
-    { label: 'Permintaan Berkas', name: 'user.requests', path: '/permintaan' },
+    { label: 'Permintaan Berkas', name: 'user.requests', path: '/home/permintaan' },
     { label: 'Berkas Dari Kampus', name: 'user.distributions', path: '/distribusi' },
 ];
 
