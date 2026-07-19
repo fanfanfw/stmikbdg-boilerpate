@@ -27,6 +27,7 @@ import {
     FolderOutlined,
     InsertDriveFileOutlined,
     ArrowBackOutlined,
+    DriveFileMoveOutlined,
 } from '@mui/icons-material';
 
 const initialFilters = {
@@ -60,6 +61,14 @@ function fileId(file) {
 
 function categoryId(category) {
     return category?.category_id ?? category?.id;
+}
+
+function canMoveFile(file) {
+    return file?.is_current !== false
+        && file?.status === 'active'
+        && ['personal', 'admin_upload'].includes(file?.source_type)
+        && !file?.request_file
+        && !file?.requestFile;
 }
 
 function normalizeExtensions(value) {
@@ -97,6 +106,10 @@ export default function PersonalArchive() {
     const [creatingCategory, setCreatingCategory] = useState(false);
     const [activeCategoryId, setActiveCategoryId] = useState('');
     const [selectedFileIds, setSelectedFileIds] = useState([]);
+    const [moveOpen, setMoveOpen] = useState(false);
+    const [moveCategoryId, setMoveCategoryId] = useState('');
+    const [moveError, setMoveError] = useState('');
+    const [moving, setMoving] = useState(false);
 
     const fetchFiles = useCallback(async () => {
         setListData((prev) => ({ ...prev, loading: true }));
@@ -241,6 +254,46 @@ export default function PersonalArchive() {
         }
     };
 
+    const openMoveDialog = () => {
+        if (!selectedFiles.length) return;
+        setMoveCategoryId('__unset__');
+        setMoveError('');
+        setMoveOpen(true);
+    };
+
+    const closeMoveDialog = () => {
+        setMoveOpen(false);
+        setMoveCategoryId('__unset__');
+        setMoveError('');
+    };
+
+    const handleMove = async () => {
+        if (moveCategoryId === '__unset__') {
+            setMoveError('Pilih kategori tujuan');
+            return;
+        }
+
+        const targetCategoryId = moveCategoryId === 'root' ? null : Number(moveCategoryId);
+        if ((!activeCategoryId && targetCategoryId === null) || String(activeCategoryId) === String(targetCategoryId)) {
+            setMoveError('File sudah berada di lokasi tersebut');
+            return;
+        }
+
+        setMoving(true);
+        try {
+            await arsipApi.moveFiles(selectedFileIds, targetCategoryId);
+            customSwal.toast.success({ message: `${selectedFiles.length} file berhasil dipindahkan` });
+            closeMoveDialog();
+            setSelectedFileIds([]);
+            await Promise.all([fetchFiles(), fetchCategories()]);
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            setMoveError(formatted.message);
+        } finally {
+            setMoving(false);
+        }
+    };
+
     const bulkDelete = () => {
         if (!selectedFiles.length) return;
         customSwal.question({
@@ -265,7 +318,8 @@ export default function PersonalArchive() {
     const quotaRemainingBytes = settings?.personal_remaining_bytes ?? null;
     const quotaPercent = Math.min(100, Number(settings?.personal_usage_percent || 0));
     const quotaFull = quotaRemainingBytes !== null && quotaRemainingBytes <= 0;
-    const activeCategory = categories.find((category) => String(categoryId(category)) === String(activeCategoryId));
+    const personalCategories = categories.filter((category) => category.category_type === 'personal');
+    const activeCategory = personalCategories.find((category) => String(categoryId(category)) === String(activeCategoryId));
     const visibleFiles = useMemo(() => listData.data.filter((file) => {
         const currentCategoryId = file.category_id ?? file.category?.category_id ?? file.category?.id ?? '';
         return activeCategoryId ? String(currentCategoryId) === String(activeCategoryId) : !currentCategoryId;
@@ -273,7 +327,7 @@ export default function PersonalArchive() {
     const tableRows = activeCategoryId
         ? visibleFiles.map((file) => ({ ...file, row_type: 'file' }))
         : [
-            ...categories.map((category) => ({
+             ...personalCategories.map((category) => ({
                 ...category,
                 row_type: 'folder',
                 row_id: `folder-${categoryId(category)}`,
@@ -282,6 +336,7 @@ export default function PersonalArchive() {
             ...visibleFiles.map((file) => ({ ...file, row_type: 'file' })),
         ];
     const selectedFiles = visibleFiles.filter((file) => selectedFileIds.includes(fileId(file)));
+    const canMoveSelection = selectedFiles.length > 0 && selectedFiles.every(canMoveFile);
 
     const validateFile = (file) => {
         if (!file) return 'Pilih file terlebih dahulu';
@@ -560,6 +615,13 @@ export default function PersonalArchive() {
                         <span className="font-semibold text-zinc-800">{activeCategory ? activeCategory.name : 'Arsip Saya'}</span>
                     </div>
                     <div className="flex gap-2 flex-wrap">
+                        <Tooltip title={selectedFiles.length && !canMoveSelection ? 'Hanya file personal aktif yang dapat dipindahkan' : ''}>
+                            <span>
+                                <Button size="small" variant="outlined" disabled={!canMoveSelection} startIcon={<DriveFileMoveOutlined />} onClick={openMoveDialog} sx={{ textTransform: 'none', borderRadius: '0.5rem' }}>
+                                    Pindahkan ({selectedFiles.length})
+                                </Button>
+                            </span>
+                        </Tooltip>
                         <Button size="small" variant="outlined" disabled={!selectedFiles.length} startIcon={<DownloadOutlined />} onClick={bulkDownload} sx={{ textTransform: 'none', borderRadius: '0.5rem' }}>
                             Download ({selectedFiles.length})
                         </Button>
@@ -578,6 +640,39 @@ export default function PersonalArchive() {
                     pageSizeOptions={[10, 25, 50]}
                 />
             </div>
+
+            <Dialog open={moveOpen} onClose={closeMoveDialog} maxWidth="xs" fullWidth>
+                <DialogTitle sx={{ fontSize: '1rem', fontWeight: 600 }}>Pindahkan File</DialogTitle>
+                <DialogContent>
+                    <div className="flex flex-col gap-4 mt-2">
+                        {moveError && <Alert severity="error">{moveError}</Alert>}
+                        <p className="text-sm text-zinc-600">
+                            {selectedFiles.length} file akan dipindahkan dari {activeCategory?.name || 'Arsip Saya'}.
+                        </p>
+                        <TextField
+                            select
+                            size="small"
+                            label="Tujuan"
+                            value={moveCategoryId}
+                            onChange={(event) => { setMoveCategoryId(event.target.value); setMoveError(''); }}
+                            fullWidth
+                        >
+                            <MenuItem value="root" disabled={!activeCategoryId}>Arsip Saya (Root)</MenuItem>
+                            {personalCategories
+                                .filter((category) => String(categoryId(category)) !== String(activeCategoryId))
+                                .map((category) => (
+                                    <MenuItem key={categoryId(category)} value={categoryId(category)}>{category.name}</MenuItem>
+                                ))}
+                        </TextField>
+                    </div>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2 }}>
+                    <Button onClick={closeMoveDialog} size="small" sx={{ textTransform: 'none' }}>Batal</Button>
+                    <Button variant="contained" onClick={handleMove} disabled={moving} size="small" sx={{ textTransform: 'none' }}>
+                        {moving ? 'Memindahkan...' : 'Pindahkan'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
             {/* Upload Dialog */}
             <Dialog
@@ -618,7 +713,7 @@ export default function PersonalArchive() {
                                 onChange={(e) => setUploadForm((prev) => ({ ...prev, category_id: e.target.value }))}
                                 fullWidth
                             >
-                                {categories.map((cat) => (
+                                {personalCategories.map((cat) => (
                                     <MenuItem key={cat.category_id ?? cat.id} value={cat.category_id ?? cat.id}>
                                         {cat.name}
                                     </MenuItem>
