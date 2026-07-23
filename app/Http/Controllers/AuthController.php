@@ -2,27 +2,28 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Session;
-
-// ? Services
 use App\Models\AuthService;
 use App\Models\UserService;
+// ? Services
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Session;
 
 class AuthController extends Controller
 {
     protected $service;
 
-    public function __construct() {
-        $this->service = new AuthService();
+    public function __construct()
+    {
+        $this->service = new AuthService;
     }
 
-    public function checkToken(Request $request) {
+    public function checkToken(Request $request)
+    {
         if ($request->query('token') and $request->query('role')) {
             $token = $request->query('token');
             $role = $request->query('role');
 
-            if (!$token) {
+            if (! $token) {
                 return self::redirectToLogin();
             }
 
@@ -36,29 +37,27 @@ class AuthController extends Controller
             Session::put('token', $token);
 
             // get user profile
-            $userService = new UserService();
+            $userService = new UserService;
             $user = $userService->getMyProfile()->getData('data')['data'];
             $userProfile = $user['profile'];
             $userAccount = $user['account'];
+            Session::put('account', $userAccount);
 
             // verify role
             $allowedRoles = ['is_admin', 'is_mhs', 'is_dosen'];
-            if (!in_array($role, $allowedRoles, true)) {
+            if (! in_array($role, $allowedRoles, true)) {
+                return response()->view('auth.role-unsupported', [
+                    'simakUrl' => config('myconfig.simak.base_url'),
+                ], 404);
+            }
+
+            if (empty($userAccount[$role])) {
                 return self::changeUserRole();
             }
 
-            if (!empty($userAccount['is_admin'])) {
-                Session::put('role', ['is_admin' => true]);
-            } elseif ($role === 'is_mhs' && !empty($userAccount['is_mhs'])) {
-                Session::put('role', ['is_mhs' => true]);
-            } elseif ($role === 'is_dosen' && !empty($userAccount['is_dosen'])) {
-                Session::put('role', ['is_dosen' => true]);
-            } else {
-                return self::changeUserRole();
-            }
+            Session::put('role', [$role => true]);
 
             // save user data to session
-            Session::put('account', $userAccount);
             Session::put('profile', $userProfile);
             Session::put('user_image', $user['account']['image']);
             Session::put('user_email', $user['account']['email']);
@@ -73,7 +72,8 @@ class AuthController extends Controller
         }
     }
 
-    public function logout() {
+    public function logout()
+    {
         if (Session::exists('token')) {
             Session::remove('token');
             Session::remove('role');
@@ -85,9 +85,28 @@ class AuthController extends Controller
         return self::redirectToLogout();
     }
 
-    public function changeUserRole() {
+    public function switchUserRole(Request $request)
+    {
+        $validated = $request->validate([
+            'role' => 'required|in:is_admin,is_mhs,is_dosen',
+        ]);
+        $account = Session::get('account');
+
+        abort_unless(is_array($account) && ! empty($account[$validated['role']]), 403);
+
+        Session::put('role', [$validated['role'] => true]);
+
+        return redirect()->route('home');
+    }
+
+    public function changeUserRole()
+    {
         $tempSessionRole = Session::get('account');
-        $allowedKeys = !empty($tempSessionRole['is_admin']) ? ['is_admin'] : ['is_mhs', 'is_dosen'];
+        if (! is_array($tempSessionRole)) {
+            return self::redirectToVerifyPage();
+        }
+
+        $allowedKeys = ['is_admin', 'is_mhs', 'is_dosen'];
         $data = [
             'roles' => array_filter($tempSessionRole, function ($item, $key) use ($allowedKeys) {
                 return in_array($key, $allowedKeys, true) && is_bool($item) && $item === true;
@@ -97,21 +116,24 @@ class AuthController extends Controller
         return view('auth.roles', $data);
     }
 
-    private function redirectToVerifyPage() {
+    private function redirectToVerifyPage()
+    {
         return redirect()->away(
-            config('myconfig.login.base_url') . 'verify?site=' . config('app.url')
+            config('myconfig.login.base_url').'verify?site='.config('app.url')
         );
     }
 
-    private function redirectToLogin() {
+    private function redirectToLogin()
+    {
         return redirect()->away(
-            config('myconfig.login.base_url') . 'login?site=' . config('app.url')
+            config('myconfig.login.base_url').'login?site='.config('app.url')
         );
     }
 
-    private function redirectToLogout() {
+    private function redirectToLogout()
+    {
         return redirect()->away(
-            config('myconfig.login.base_url') . 'logout?site=' .  config('app.url')
+            config('myconfig.login.base_url').'logout?site='.config('app.url')
         );
     }
 }

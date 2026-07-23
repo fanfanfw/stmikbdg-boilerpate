@@ -52,9 +52,6 @@
                             case 'is_admin':
                                 $setRoles['Admin'] = $key;
                                 break;
-                            case 'is_dev':
-                                $setRoles['Developer'] = $key;
-                                break;
 
                             default:
                                 break;

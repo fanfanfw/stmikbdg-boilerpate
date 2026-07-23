@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ArsipDigitalProxyController;
+use App\Http\Controllers\AuthController;
 use Illuminate\Support\Facades\Route;
 
 /**
@@ -12,6 +12,7 @@ Route::controller(AuthController::class)
         Route::get('/', 'checkToken')->name('check');
         Route::get('/logout', 'logout')->name('logout'); // gunakan untuk logout
         Route::get('/roles', 'changeUserRole')->middleware('auth.token');
+        Route::post('/roles', 'switchUserRole')->middleware('auth.token')->name('roles.switch');
     });
 
 /**
@@ -64,8 +65,8 @@ Route::middleware('auth.token')
  *
  * ? contoh penggunaan: middleware(['auth.token', 'auth.mahasiswa'])
  */
-
 Route::middleware('auth.token')->get('/react/{any?}', function () {
     $path = request()->route('any', '');
-    return redirect('/home' . ($path ? '/' . $path : ''));
+
+    return redirect('/home'.($path ? '/'.$path : ''));
 })->where('any', '.*');

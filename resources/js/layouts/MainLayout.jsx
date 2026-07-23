@@ -16,6 +16,7 @@ import {
     LogoutOutlined,
     PersonOutlined,
     AppsOutlined,
+    ManageAccountsOutlined,
 } from "@mui/icons-material";
 
 const userMenuItems = [
@@ -151,6 +152,7 @@ export default function MainLayout({ children }) {
                         displayRole={displayRole}
                         pendingRequestCount={pendingRequestCount}
                         simakUrl={simakBaseUrl()}
+                        account={userdata?.account}
                     />
                 </div>
 
@@ -202,8 +204,24 @@ export default function MainLayout({ children }) {
     );
 }
 
-function SidebarContent({ menuItems, displayName, displayRole, pendingRequestCount = 0, simakUrl = '', mobile = false, onClose }) {
+function SidebarContent({ menuItems, displayName, displayRole, pendingRequestCount = 0, simakUrl = '', account = null, mobile = false, onClose }) {
     const location = useLocation();
+    const roleOptions = [
+        ['is_admin', 'Admin'],
+        ['is_mhs', 'Mahasiswa'],
+        ['is_dosen', 'Dosen'],
+    ].filter(([key]) => account?.[key] === true);
+
+    const changeRole = (role) => {
+        const form = document.createElement('form');
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+        form.method = 'POST';
+        form.action = '/roles';
+        form.innerHTML = `<input type="hidden" name="_token" value="${csrf || ''}"><input type="hidden" name="role" value="${role}">`;
+        document.body.appendChild(form);
+        form.submit();
+    };
 
     return (
         <>
@@ -235,6 +253,23 @@ function SidebarContent({ menuItems, displayName, displayRole, pendingRequestCou
                     </div>
                 </div>
             </div>
+            {roleOptions.length > 1 && (
+                <div className="dropdown dropdown-bottom w-full mt-4">
+                    <button type="button" tabIndex={0} className="mx-5 p-2 w-[calc(100%-2.5rem)] rounded-md bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-3 transition-colors">
+                        <ManageAccountsOutlined fontSize="small" />
+                        <span className="font-semibold uppercase text-xs">Ubah Role</span>
+                    </button>
+                    <ul tabIndex={0} className="dropdown-content menu mt-2 mx-5 p-2 shadow-md bg-white border border-zinc-200 rounded-md z-20 w-[calc(100%-2.5rem)]">
+                        {roleOptions.map(([key, label]) => (
+                            <li key={key}>
+                                <button type="button" onClick={() => changeRole(key)} disabled={label === displayRole}>
+                                    {label}{label === displayRole ? ' (Aktif)' : ''}
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
             <hr className="my-5 border-zinc-400" />
             <div className="overflow-hidden relative">
                 <p className="font-medium opacity-60 text-xs px-5">
