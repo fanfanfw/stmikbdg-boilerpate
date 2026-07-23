@@ -46,9 +46,7 @@ class AuthController extends Controller
             // verify role
             $allowedRoles = ['is_admin', 'is_mhs', 'is_dosen'];
             if (! in_array($role, $allowedRoles, true)) {
-                return response()->view('auth.role-unsupported', [
-                    'simakUrl' => config('myconfig.simak.base_url'),
-                ], 404);
+                return self::changeUserRole($role);
             }
 
             if (empty($userAccount[$role])) {
@@ -99,7 +97,7 @@ class AuthController extends Controller
         return redirect()->route('home');
     }
 
-    public function changeUserRole()
+    public function changeUserRole(?string $unsupportedRole = null)
     {
         $tempSessionRole = Session::get('account');
         if (! is_array($tempSessionRole)) {
@@ -111,6 +109,8 @@ class AuthController extends Controller
             'roles' => array_filter($tempSessionRole, function ($item, $key) use ($allowedKeys) {
                 return in_array($key, $allowedKeys, true) && is_bool($item) && $item === true;
             }, ARRAY_FILTER_USE_BOTH),
+            'unsupportedRole' => $unsupportedRole,
+            'simakUrl' => config('myconfig.simak.base_url'),
         ];
 
         return view('auth.roles', $data);

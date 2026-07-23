@@ -29,9 +29,15 @@
     <body>
         <main>
             <div class="container mt-3">
-                <p>
-                    Anda memiliki beberapa role aktif, silahkan pilih role untuk mengakses web ini.
-                </p>
+                @if ($unsupportedRole)
+                    <div class="alert alert-warning" role="alert">
+                        Role yang dipilih tidak tersedia di Arsip Digital. Pilih role Arsip Digital yang aktif pada akun Anda atau kembali ke SIMAK.
+                    </div>
+                @else
+                    <p>
+                        Anda memiliki beberapa role aktif, silakan pilih role untuk mengakses web ini.
+                    </p>
+                @endif
                 @php
                     $setRoles = [];
 
@@ -58,18 +64,19 @@
                         }
                     }
                 @endphp
-                <ul>
+                <div class="d-flex flex-wrap gap-2">
                     @foreach ($setRoles as $key => $role)
-                        <li>
-                            <a
-                                href="/?token={{ session('token') }}&role={{ $role }}"
-                                class="text-decoration-none"
-                            >
-                                {{ $key === 'Developer' ? 'Developer (Belum Difungsikan)' : $key }}
-                            </a>
-                        </li>
+                        <a
+                            href="/?token={{ session('token') }}&role={{ $role }}"
+                            class="btn btn-primary"
+                        >
+                            Masuk sebagai {{ $key }}
+                        </a>
                     @endforeach
-                </ul>
+                    @if ($simakUrl)
+                        <a href="{{ $simakUrl }}" class="btn btn-outline-secondary">Kembali ke SIMAK</a>
+                    @endif
+                </div>
             </div>
         </main>
 
