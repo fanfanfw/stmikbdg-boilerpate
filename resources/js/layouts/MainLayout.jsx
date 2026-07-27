@@ -24,6 +24,7 @@ const userMenuItems = [
     { label: 'Dashboard', path: '/home', icon: DashboardOutlined },
     { label: 'Arsip Saya', path: '/home/arsip-saya', icon: FolderOutlined },
     { label: 'Tanda Tangan PDF', path: '/home/tanda-tangan', icon: DrawOutlined },
+    { label: 'Request Tanda Tangan', path: '/home/request-tanda-tangan', icon: DrawOutlined },
     { label: 'Permintaan Berkas', path: '/home/permintaan', icon: DescriptionOutlined },
     { label: 'Berkas Kampus', path: '/home/distribusi', icon: LocalShippingOutlined },
 ];
@@ -282,7 +283,7 @@ function SidebarContent({ menuItems, displayName, displayRole, pendingRequestCou
                 {menuItems.map((item) => {
                     const active = item.path === '/home'
                         ? location.pathname === '/home' || location.pathname === '/home/' || location.pathname === '/'
-                        : location.pathname === item.path;
+                        : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
                     return (
                         <div key={item.path} className="relative overflow-clip w-full">
                             <div className={`absolute top-0 left-0 w-2 h-full rounded-md bg-blue-500 ${active ? 'opacity-100' : 'opacity-0'}`} />

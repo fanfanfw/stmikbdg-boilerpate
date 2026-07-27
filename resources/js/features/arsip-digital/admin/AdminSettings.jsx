@@ -18,6 +18,11 @@ const defaultForm = {
     dosen_quota_mb: 50,
     default_max_file_size_mb: 10,
     default_allowed_extensions: 'pdf, jpg, jpeg, png, doc, docx, xls, xlsx',
+    signature_request_max_files: 10,
+    signature_request_max_file_size_mb: 10,
+    signature_request_max_total_size_mb: 50,
+    signature_request_expiry_days: 7,
+    signature_request_cooldown_hours: 24,
 };
 
 function normalizeExtensions(value) {
@@ -46,6 +51,11 @@ export default function AdminSettings() {
                 default_allowed_extensions: Array.isArray(settings?.default_allowed_extensions)
                     ? settings.default_allowed_extensions.join(', ')
                     : defaultForm.default_allowed_extensions,
+                signature_request_max_files: settings?.signature_request_max_files ?? 10,
+                signature_request_max_file_size_mb: settings?.signature_request_max_file_size_mb ?? 10,
+                signature_request_max_total_size_mb: settings?.signature_request_max_total_size_mb ?? 50,
+                signature_request_expiry_days: settings?.signature_request_expiry_days ?? 7,
+                signature_request_cooldown_hours: settings?.signature_request_cooldown_hours ?? 24,
             });
         } catch (err) {
             const formatted = await formatArsipError(err);
@@ -74,6 +84,11 @@ export default function AdminSettings() {
                     mahasiswa: Number(form.mahasiswa_quota_mb),
                     dosen: Number(form.dosen_quota_mb),
                 },
+                signature_request_max_files: Number(form.signature_request_max_files),
+                signature_request_max_file_size_mb: Number(form.signature_request_max_file_size_mb),
+                signature_request_max_total_size_mb: Number(form.signature_request_max_total_size_mb),
+                signature_request_expiry_days: Number(form.signature_request_expiry_days),
+                signature_request_cooldown_hours: Number(form.signature_request_cooldown_hours),
             });
             customSwal.toast.success({ message: 'Pengaturan berhasil disimpan.' });
             await loadSettings();
@@ -163,6 +178,17 @@ export default function AdminSettings() {
                         helperText="Pisahkan dengan koma atau baris baru. Contoh: pdf, jpg, png"
                         fullWidth
                     />
+                </div>
+
+                <div className="border-t border-zinc-200 pt-5"><p className="text-sm font-semibold text-zinc-800">Request Tanda Tangan</p></div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[
+                        ['signature_request_max_files', 'Maks jumlah file'],
+                        ['signature_request_max_file_size_mb', 'Maks per file (MB)'],
+                        ['signature_request_max_total_size_mb', 'Maks total (MB)'],
+                        ['signature_request_expiry_days', 'Kedaluwarsa (hari)'],
+                        ['signature_request_cooldown_hours', 'Cooldown (jam)'],
+                    ].map(([key, label]) => <TextField key={key} type="number" size="small" label={label} value={form[key]} onChange={(event) => updateField(key, event.target.value)} inputProps={{ min: key === 'signature_request_cooldown_hours' ? 0 : 1 }} fullWidth />)}
                 </div>
 
                 <div className="flex justify-end">

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Alert, Box, Button, CircularProgress, FormControlLabel, IconButton, MenuItem, Paper, Radio, RadioGroup, TextField } from '@mui/material';
@@ -131,8 +132,10 @@ function PdfPage({ pdf, pageNumber, placements, signature, canAdd, onAdd, onUpda
     );
 }
 
-export default function SelfSigning() {
+export default function SelfSigning({ requestMode = false }) {
     const { role } = useUser();
+    const { requestId, fileId } = useParams();
+    const navigate = useNavigate();
     const isAdmin = role === 'admin';
     const [files, setFiles] = useState([]);
     const [sourceId, setSourceId] = useState('');
@@ -148,9 +151,18 @@ export default function SelfSigning() {
     const [result, setResult] = useState(null);
 
     useEffect(() => {
+        if (requestMode) {
+            setBusy(true);
+            arsipApi.createRequestSigningSession(fileId).then(async (response) => {
+                const session = response?.data ?? response;
+                setSessionId(session?.sign_session_id);
+                await loadPdf(await arsipApi.requestSigningSource(fileId), fileId, session?.source_filename || session?.filename || 'dokumen.pdf');
+            }).catch(async (err) => setError((await formatArsipError(err)).message)).finally(() => setBusy(false));
+            return;
+        }
         if (isAdmin) return;
         arsipApi.files({ per_page: 100 }).then((response) => setFiles(unwrapFiles(response).filter(isPdf))).catch(async (err) => setError((await formatArsipError(err)).message));
-    }, [isAdmin]);
+    }, [isAdmin, requestMode, requestId, fileId]);
     useEffect(() => () => pdf?.destroy(), [pdf]);
 
     const loadPdf = async (blob, id, filename) => {
@@ -207,8 +219,11 @@ export default function SelfSigning() {
             placements.forEach((placement, index) => {
                 if (placement.kind === 'png') form.append(`signatures[${index}]`, pngFileFromDataUrl(placement.payload));
             });
-            const response = await arsipApi.finalizeSigning(sessionId, form);
+            const response = requestMode
+                ? await arsipApi.finalizeRequestSigning(sessionId, form)
+                : await arsipApi.finalizeSigning(sessionId, form);
             setResult(sessionOf(response));
+            if (requestMode) navigate(`/home/request-tanda-tangan/${requestId}`);
         } catch (err) { setError((await formatArsipError(err)).message); } finally { setBusy(false); }
     };
     const download = async () => {
@@ -234,7 +249,7 @@ export default function SelfSigning() {
         <div className="grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-5 items-start">
             <Paper variant="outlined" className="p-4 space-y-4 xl:sticky xl:top-4">
                 <h2 className="font-semibold text-zinc-800">1. Pilih PDF</h2>
-                {isAdmin ? <Button component="label" variant="outlined" startIcon={<UploadFileOutlined />} fullWidth>Upload PDF<input hidden type="file" accept="application/pdf,.pdf" onChange={upload} /></Button> : <TextField select fullWidth size="small" label="File Arsip Saya" value={sourceId} onChange={(event) => selectArchive(event.target.value)}><MenuItem value="">Pilih PDF</MenuItem>{files.map((file) => <MenuItem key={idOf(file)} value={idOf(file)}>{nameOf(file)}</MenuItem>)}</TextField>}
+                {requestMode ? <Alert severity="info">Sumber PDF ditetapkan oleh request.</Alert> : isAdmin ? <Button component="label" variant="outlined" startIcon={<UploadFileOutlined />} fullWidth>Upload PDF<input hidden type="file" accept="application/pdf,.pdf" onChange={upload} /></Button> : <TextField select fullWidth size="small" label="File Arsip Saya" value={sourceId} onChange={(event) => selectArchive(event.target.value)}><MenuItem value="">Pilih PDF</MenuItem>{files.map((file) => <MenuItem key={idOf(file)} value={idOf(file)}>{nameOf(file)}</MenuItem>)}</TextField>}
                 <p className="text-xs text-zinc-500">{isAdmin ? 'PDF maksimal 10 MB.' : `${files.length} PDF tersedia.`}</p>
                 <hr />
                 <h2 className="font-semibold text-zinc-800">2. Buat tanda tangan</h2>
@@ -245,7 +260,7 @@ export default function SelfSigning() {
                 <Button startIcon={<AddOutlined />} variant="contained" fullWidth disabled={!pdf || !activeSignature || placements.length >= MAX_PLACEMENTS} onClick={() => addPlacement(1, .65, .75)}>Tambahkan</Button>
                 <p className="text-xs text-zinc-500">{placements.length}/{MAX_PLACEMENTS} penempatan. Tombol Tambahkan menempatkan tanda tangan ke halaman 1. Untuk halaman lain, scroll ke halaman tujuan lalu klik dua kali pada posisi yang diinginkan. Tarik untuk memindahkan; gunakan kotak biru untuk mengubah ukuran.</p>
                 <Button variant="contained" disabled={!placements.length || busy || !!result} onClick={finalize}>Finalisasi</Button>
-                {result && !result.saved && <Alert severity="success">PDF selesai diproses.<div className="mt-2 flex gap-2 flex-wrap"><Button size="small" disabled={busy} startIcon={<DownloadOutlined />} onClick={download}>Download</Button>{!isAdmin && <Button size="small" disabled={busy} onClick={save}>Simpan ke Arsip Saya</Button>}</div>{!isAdmin && <p className="mt-2 text-xs">Simpan mengakhiri sesi tanda tangan. Download hasil terlebih dahulu bila diperlukan.</p>}</Alert>}
+                {result && !result.saved && <Alert severity="success">PDF selesai diproses.{!requestMode && <><div className="mt-2 flex gap-2 flex-wrap"><Button size="small" disabled={busy} startIcon={<DownloadOutlined />} onClick={download}>Download</Button>{!isAdmin && <Button size="small" disabled={busy} onClick={save}>Simpan ke Arsip Saya</Button>}</div>{!isAdmin && <p className="mt-2 text-xs">Simpan mengakhiri sesi tanda tangan. Download hasil terlebih dahulu bila diperlukan.</p>}</>}</Alert>}
                 {result?.saved && <Alert severity="success">PDF tersimpan di Arsip Saya. Sesi tanda tangan telah berakhir.</Alert>}
             </Paper>
             <Box sx={{ bgcolor: 'grey.100', borderRadius: 2, p: { xs: 1, sm: 2 }, minHeight: 400 }}>

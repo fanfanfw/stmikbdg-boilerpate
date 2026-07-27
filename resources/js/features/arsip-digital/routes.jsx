@@ -19,6 +19,7 @@ import AdminSettings from "./admin/AdminSettings";
 
 import NotAllowed from "./common/NotAllowed";
 import SelfSigning from "./common/SelfSigning";
+import SignatureRequests, { SignatureRequestDetail } from "./user/SignatureRequests";
 
 export default function ArsipDigitalRoutes() {
     const { role } = useUser();
@@ -52,6 +53,9 @@ export default function ArsipDigitalRoutes() {
                 <Route path="/home/permintaan/:id" element={<UserRequestDetail />} />
                 <Route path="/home/distribusi" element={<UserDistributions />} />
                 <Route path="/home/tanda-tangan" element={<SelfSigning />} />
+                <Route path="/home/request-tanda-tangan" element={<SignatureRequests />} />
+                <Route path="/home/request-tanda-tangan/:id" element={<SignatureRequestDetail />} />
+                <Route path="/home/request-tanda-tangan/:requestId/tanda-tangan/:fileId" element={<SelfSigning requestMode />} />
                 <Route path="*" element={<NotAllowed />} />
             </Routes>
         );
