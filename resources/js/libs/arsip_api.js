@@ -5,6 +5,7 @@ import {
     deleteJson,
     uploadFormData,
     downloadBlob,
+    getBlob,
 } from './arsip_http';
 
 // --------------------------------------------------------------------------
@@ -47,6 +48,14 @@ export const arsipApi = {
     },
     deleteFile: (id, reason) => deleteJson(`/files/${id}`, { reason }),
     restoreFile: (id) => postJson(`/files/${id}/restore`),
+
+    signingSource: (fileId) => getBlob(`/files/${fileId}/download`),
+    createSigningSession: (payload, multipart = false) => multipart
+        ? uploadFormData('/pdf-sign-sessions', payload)
+        : postJson('/pdf-sign-sessions', payload),
+    finalizeSigning: (id, formData) => uploadFormData(`/pdf-sign-sessions/${id}/finalize`, formData),
+    downloadSignedFile: (id, filename) => downloadBlob(`/pdf-sign-sessions/${id}/download`, filename),
+    saveSignedFile: (id, payload = {}) => postJson(`/pdf-sign-sessions/${id}/save`, payload),
 
     // Admin Requests
     adminRequests: (params) => getJson('/admin/requests', params),
