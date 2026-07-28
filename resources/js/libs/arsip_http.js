@@ -179,11 +179,23 @@ export async function formatArsipError(error) {
 // Request methods
 // --------------------------------------------------------------------------
 
+async function retryGet(request, attempts = 3) {
+    for (let attempt = 0; ; attempt += 1) {
+        try {
+            return await request();
+        } catch (error) {
+            const status = error.response?.status;
+            if (attempt >= attempts - 1 || error.response && ![502, 503, 504].includes(status)) throw error;
+            await new Promise((resolve) => setTimeout(resolve, 200 * 2 ** attempt));
+        }
+    }
+}
+
 export async function getJson(path, params = {}, options = {}) {
-    const response = await client.get(path, {
+    const response = await retryGet(() => client.get(path, {
         params: cleanParams(params),
         ...options,
-    });
+    }));
     return normalizeArsipResponse(response);
 }
 
@@ -212,11 +224,11 @@ export async function uploadFormData(path, formData, options = {}) {
 }
 
 export async function getBlob(path, options = {}) {
-    const response = await client.get(path, {
+    const response = await retryGet(() => client.get(path, {
         responseType: 'blob',
         timeout: 120_000,
         ...options,
-    });
+    }));
     return response.data;
 }
 

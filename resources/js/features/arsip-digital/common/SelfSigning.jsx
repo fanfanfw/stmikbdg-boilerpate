@@ -149,6 +149,7 @@ export default function SelfSigning({ requestMode = false }) {
     const [placements, setPlacements] = useState([]);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
+    const [configWarning, setConfigWarning] = useState('');
     const [result, setResult] = useState(null);
     const [maxFileSizeMb, setMaxFileSizeMb] = useState(null);
     const [processing, setProcessing] = useState(false);
@@ -163,7 +164,7 @@ export default function SelfSigning({ requestMode = false }) {
             const settings = response?.data ?? response;
             const value = requestMode ? settings?.signature_request_max_file_size_mb : settings?.default_max_file_size_mb;
             if (value != null) setMaxFileSizeMb(Number(value));
-        }).catch(async (err) => setError((await formatArsipError(err)).message));
+        }).catch(async (err) => setConfigWarning((await formatArsipError(err)).message));
         if (requestMode) {
             setBusy(true);
             arsipApi.createRequestSigningSession(fileId).then(async (response) => {
@@ -174,7 +175,7 @@ export default function SelfSigning({ requestMode = false }) {
             return;
         }
         if (isAdmin) return;
-        arsipApi.files({ per_page: 100 }).then((response) => setFiles(unwrapFiles(response).filter(isPdf))).catch(async (err) => setError((await formatArsipError(err)).message));
+        arsipApi.files({ per_page: 100 }).then((response) => setFiles(unwrapFiles(response).filter((file) => isPdf(file) && file.storage_available !== false))).catch(async (err) => setError((await formatArsipError(err)).message));
     }, [isAdmin, requestMode, requestId, fileId]);
     useEffect(() => () => pdf?.destroy(), [pdf]);
     useEffect(() => () => { mounted.current = false; clearTimeout(pollTimer.current); pollCancel.current?.(); }, []);
@@ -302,6 +303,7 @@ export default function SelfSigning({ requestMode = false }) {
     return <div>
         <PageHeader title="Tanda Tangan PDF" subtitle="Buat tanda tangan, tempatkan pada halaman, lalu finalisasi dokumen." />
         {error && <Alert severity="error" onClose={() => setError('')} sx={{ mb: 2 }}>{error}</Alert>}
+        {configWarning && <Alert severity="warning" onClose={() => setConfigWarning('')} sx={{ mb: 2 }}>Batas ukuran PDF tidak dapat dimuat: {configWarning}</Alert>}
         <div className="grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-5 items-start">
             <Paper variant="outlined" className="p-4 space-y-4 xl:sticky xl:top-4">
                 <h2 className="font-semibold text-zinc-800">1. Pilih PDF</h2>
