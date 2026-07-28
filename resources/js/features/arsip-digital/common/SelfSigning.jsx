@@ -11,8 +11,9 @@ import { formatArsipError } from '../../../libs/arsip_http';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_PLACEMENTS = 20;
+const POLL_INTERVAL_MS = 1500;
+const POLL_TIMEOUT_MS = 180000;
 const idOf = (file) => file?.file_id ?? file?.id;
 const nameOf = (file) => file?.display_filename || file?.original_filename || file?.filename || 'dokumen.pdf';
 const unwrapFiles = (response) => {
@@ -149,8 +150,20 @@ export default function SelfSigning({ requestMode = false }) {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [result, setResult] = useState(null);
+    const [maxFileSizeMb, setMaxFileSizeMb] = useState(null);
+    const [processing, setProcessing] = useState(false);
+    const [finalizeFailed, setFinalizeFailed] = useState(false);
+    const pollTimer = useRef(null);
+    const pollCancel = useRef(null);
+    const mounted = useRef(true);
 
     useEffect(() => {
+        const loadLimit = requestMode ? arsipApi.signatureRequestConfig() : isAdmin ? arsipApi.settings().catch(() => arsipApi.signatureRequestConfig()) : Promise.resolve(null);
+        loadLimit.then((response) => {
+            const settings = response?.data ?? response;
+            const value = requestMode ? settings?.signature_request_max_file_size_mb : settings?.default_max_file_size_mb;
+            if (value != null) setMaxFileSizeMb(Number(value));
+        }).catch(async (err) => setError((await formatArsipError(err)).message));
         if (requestMode) {
             setBusy(true);
             arsipApi.createRequestSigningSession(fileId).then(async (response) => {
@@ -164,6 +177,7 @@ export default function SelfSigning({ requestMode = false }) {
         arsipApi.files({ per_page: 100 }).then((response) => setFiles(unwrapFiles(response).filter(isPdf))).catch(async (err) => setError((await formatArsipError(err)).message));
     }, [isAdmin, requestMode, requestId, fileId]);
     useEffect(() => () => pdf?.destroy(), [pdf]);
+    useEffect(() => () => { mounted.current = false; clearTimeout(pollTimer.current); pollCancel.current?.(); }, []);
 
     const loadPdf = async (blob, id, filename) => {
         const document = await getDocument({ data: await blob.arrayBuffer() }).promise;
@@ -187,7 +201,9 @@ export default function SelfSigning({ requestMode = false }) {
         const file = event.target.files?.[0];
         event.target.value = '';
         if (!file) return;
-        if (file.type !== 'application/pdf' || file.size > MAX_FILE_SIZE) { setError('Pilih PDF berukuran maksimal 10 MB.'); return; }
+        if (file.type && file.type !== 'application/pdf') { setError('File harus berformat PDF.'); return; }
+        if (!file.name.toLowerCase().endsWith('.pdf')) { setError('Ekstensi file harus .pdf.'); return; }
+        if (maxFileSizeMb != null && file.size > maxFileSizeMb * 1024 * 1024) { setError(`Ukuran file melebihi batas ${maxFileSizeMb} MB.`); return; }
         setBusy(true); setError('');
         try {
             const form = new FormData(); form.append('file', file);
@@ -203,8 +219,41 @@ export default function SelfSigning({ requestMode = false }) {
     };
     const activeSignature = method === 'text' ? (text.trim() ? { kind: 'text', payload: text.trim(), method } : null) : (signature ? { ...signature, method } : null);
     const addPlacement = (page, x, y) => setPlacements((items) => items.length >= MAX_PLACEMENTS ? items : [...items, { id: crypto.randomUUID(), page, x, y, width: .25, height: .08, ...activeSignature }]);
+    const requestFileSynced = (session) => !requestMode || session?.request_file_synced || session?.request_file?.signed_at || session?.request_file?.result_sha256;
+    const safeError = (message) => String(message || 'Pemrosesan PDF gagal.').replace(/[<>\u0000-\u001f]/g, '').slice(0, 300);
+    const waitForFinalized = (id) => new Promise((resolve, reject) => {
+        const started = Date.now();
+        let retries = 0;
+        let settled = false;
+        const finish = (callback, value) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(pollTimer.current);
+            pollCancel.current = null;
+            callback(value);
+        };
+        pollCancel.current = () => finish(resolve, null);
+        const poll = async () => {
+            if (!mounted.current) { finish(resolve, null); return; }
+            if (Date.now() - started >= POLL_TIMEOUT_MS) { finish(reject, new Error('Pemrosesan PDF melewati batas waktu 180 detik. Silakan coba lagi.')); return; }
+            try {
+                const session = sessionOf(await arsipApi.signingSession(id));
+                retries = 0;
+                if (session?.status === 'failed') { finish(reject, new Error(safeError(session?.error_message || session?.message))); return; }
+                if (session?.status === 'finalized' && requestFileSynced(session)) { finish(resolve, session); return; }
+                pollTimer.current = setTimeout(poll, POLL_INTERVAL_MS);
+            } catch (err) {
+                const status = err?.response?.status;
+                if ([401, 403, 404, 410].includes(status) || status && status < 500) { finish(reject, err); return; }
+                retries += 1;
+                pollTimer.current = setTimeout(poll, Math.min(POLL_INTERVAL_MS * 2 ** retries, 10000));
+            }
+        };
+        poll();
+    });
     const finalize = async () => {
-        setBusy(true); setError('');
+        if (processing) return;
+        setBusy(true); setProcessing(true); setFinalizeFailed(false); setResult(null); setError('');
         try {
             const form = new FormData();
             form.append('placements', JSON.stringify(placements.map((placement) => ({
@@ -222,9 +271,16 @@ export default function SelfSigning({ requestMode = false }) {
             const response = requestMode
                 ? await arsipApi.finalizeRequestSigning(sessionId, form)
                 : await arsipApi.finalizeSigning(sessionId, form);
-            setResult(sessionOf(response));
+            const initial = sessionOf(response);
+            const completed = initial?.status === 'finalized' && requestFileSynced(initial) ? initial : await waitForFinalized(sessionId);
+            if (!mounted.current || !completed) return;
+            setResult(completed);
             if (requestMode) navigate(`/home/request-tanda-tangan/${requestId}`);
-        } catch (err) { setError((await formatArsipError(err)).message); } finally { setBusy(false); }
+        } catch (err) {
+            if (mounted.current) { setFinalizeFailed(true); setError(err instanceof Error ? err.message : (await formatArsipError(err)).message); }
+        } finally {
+            if (mounted.current) { setBusy(false); setProcessing(false); }
+        }
     };
     const download = async () => {
         setBusy(true); setError('');
@@ -250,7 +306,7 @@ export default function SelfSigning({ requestMode = false }) {
             <Paper variant="outlined" className="p-4 space-y-4 xl:sticky xl:top-4">
                 <h2 className="font-semibold text-zinc-800">1. Pilih PDF</h2>
                 {requestMode ? <Alert severity="info">Sumber PDF ditetapkan oleh request.</Alert> : isAdmin ? <Button component="label" variant="outlined" startIcon={<UploadFileOutlined />} fullWidth>Upload PDF<input hidden type="file" accept="application/pdf,.pdf" onChange={upload} /></Button> : <TextField select fullWidth size="small" label="File Arsip Saya" value={sourceId} onChange={(event) => selectArchive(event.target.value)}><MenuItem value="">Pilih PDF</MenuItem>{files.map((file) => <MenuItem key={idOf(file)} value={idOf(file)}>{nameOf(file)}</MenuItem>)}</TextField>}
-                <p className="text-xs text-zinc-500">{isAdmin ? 'PDF maksimal 10 MB.' : `${files.length} PDF tersedia.`}</p>
+                <p className="text-xs text-zinc-500">{isAdmin ? (maxFileSizeMb == null ? 'Memuat batas ukuran PDF...' : `PDF maksimal ${maxFileSizeMb} MB.`) : `${files.length} PDF tersedia.`}</p>
                 <hr />
                 <h2 className="font-semibold text-zinc-800">2. Buat tanda tangan</h2>
                 <RadioGroup row value={method} onChange={(event) => { setMethod(event.target.value); setSignature(null); }}><FormControlLabel value="draw" control={<Radio size="small" />} label="Draw" /><FormControlLabel value="text" control={<Radio size="small" />} label="Text" /><FormControlLabel value="upload" control={<Radio size="small" />} label="PNG" /></RadioGroup>
@@ -259,7 +315,8 @@ export default function SelfSigning({ requestMode = false }) {
                 {method === 'upload' && <Button component="label" variant="outlined" fullWidth>Upload PNG<input hidden type="file" accept="image/png,.png" onChange={chooseImage} /></Button>}
                 <Button startIcon={<AddOutlined />} variant="contained" fullWidth disabled={!pdf || !activeSignature || placements.length >= MAX_PLACEMENTS} onClick={() => addPlacement(1, .65, .75)}>Tambahkan</Button>
                 <p className="text-xs text-zinc-500">{placements.length}/{MAX_PLACEMENTS} penempatan. Tombol Tambahkan menempatkan tanda tangan ke halaman 1. Untuk halaman lain, scroll ke halaman tujuan lalu klik dua kali pada posisi yang diinginkan. Tarik untuk memindahkan; gunakan kotak biru untuk mengubah ukuran.</p>
-                <Button variant="contained" disabled={!placements.length || busy || !!result} onClick={finalize}>Finalisasi</Button>
+                <Button variant="contained" disabled={!placements.length || busy || processing || !!result} onClick={finalize}>{finalizeFailed ? 'Coba Finalisasi Lagi' : 'Finalisasi'}</Button>
+                {processing && <Alert severity="info">PDF sedang diproses. Status diperiksa otomatis hingga 180 detik. Mohon tunggu...</Alert>}
                 {result && !result.saved && <Alert severity="success">PDF selesai diproses.{!requestMode && <><div className="mt-2 flex gap-2 flex-wrap"><Button size="small" disabled={busy} startIcon={<DownloadOutlined />} onClick={download}>Download</Button>{!isAdmin && <Button size="small" disabled={busy} onClick={save}>Simpan ke Arsip Saya</Button>}</div>{!isAdmin && <p className="mt-2 text-xs">Simpan mengakhiri sesi tanda tangan. Download hasil terlebih dahulu bila diperlukan.</p>}</>}</Alert>}
                 {result?.saved && <Alert severity="success">PDF tersimpan di Arsip Saya. Sesi tanda tangan telah berakhir.</Alert>}
             </Paper>

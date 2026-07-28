@@ -45,6 +45,12 @@ function StudentRequests() {
     };
     const save = async () => {
         setError('');
+        if (form.file_ids.length > limits.maxFiles) { setError(`Jumlah file melebihi batas ${limits.maxFiles} file.`); return; }
+        const selectedFiles = form.file_ids.map((id) => archives.find((file) => String(fileIdOf(file)) === String(id))).filter(Boolean);
+        const oversized = selectedFiles.find((file) => Number(file.file_size_bytes) > limits.maxFileMb * 1024 * 1024);
+        if (oversized) { setError(`File "${nameOf(oversized)}" melebihi batas ${limits.maxFileMb} MB per file.`); return; }
+        const totalBytes = selectedFiles.reduce((total, file) => total + Number(file.file_size_bytes || 0), 0);
+        if (totalBytes > limits.maxTotalMb * 1024 * 1024) { setError(`Total ukuran ${selectedFiles.length} file melebihi batas ${limits.maxTotalMb} MB.`); return; }
         try {
             editing ? await arsipApi.updateSignatureRequest(idOf(editing), form) : await arsipApi.createSignatureRequest(form);
             setOpen(false); await load(); customSwal.toast.success({ message: editing ? 'Request diperbarui.' : 'Request dibuat.' });

@@ -54,6 +54,7 @@ export const arsipApi = {
         ? uploadFormData('/pdf-sign-sessions', payload)
         : postJson('/pdf-sign-sessions', payload),
     finalizeSigning: (id, formData) => uploadFormData(`/pdf-sign-sessions/${id}/finalize`, formData),
+    signingSession: (id) => getJson(`/pdf-sign-sessions/${id}`),
     downloadSignedFile: (id, filename) => downloadBlob(`/pdf-sign-sessions/${id}/download`, filename),
     saveSignedFile: (id, payload = {}) => postJson(`/pdf-sign-sessions/${id}/save`, payload),
 
