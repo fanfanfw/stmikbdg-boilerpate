@@ -8,6 +8,10 @@ memory_limit=${PHP_MEMORY_LIMIT:-512M}
 max_execution_time=${PHP_MAX_EXECUTION_TIME:-180}
 EOF
 
+mkdir -p /app/storage/framework/cache /app/storage/framework/sessions /app/storage/framework/views /app/storage/logs /app/bootstrap/cache
+chown -R www-data:www-data /app/storage /app/bootstrap/cache
+chmod -R ug+rwX /app/storage /app/bootstrap/cache
+
 if [ "${1:-}" = "apache2-foreground" ]; then
     port=${PORT:-8000}
     sed -ri "s/^Listen [0-9]+$/Listen ${port}/" /etc/apache2/ports.conf
