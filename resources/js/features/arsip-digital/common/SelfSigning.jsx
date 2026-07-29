@@ -12,8 +12,14 @@ import { formatArsipError } from '../../../libs/arsip_http';
 GlobalWorkerOptions.workerSrc = workerUrl;
 
 const MAX_PLACEMENTS = 20;
-const POLL_INTERVAL_MS = 1500;
+const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 180000;
+const retryDelay = (error, retries) => {
+    const value = error?.response?.headers?.['retry-after'];
+    const seconds = Number(value);
+    const parsed = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(value) - Date.now();
+    return Math.min(parsed > 0 ? parsed : POLL_INTERVAL_MS * 2 ** retries, 10000);
+};
 const idOf = (file) => file?.file_id ?? file?.id;
 const nameOf = (file) => file?.display_filename || file?.original_filename || file?.filename || 'dokumen.pdf';
 const unwrapFiles = (response) => {
@@ -245,9 +251,9 @@ export default function SelfSigning({ requestMode = false }) {
                 pollTimer.current = setTimeout(poll, POLL_INTERVAL_MS);
             } catch (err) {
                 const status = err?.response?.status;
-                if ([401, 403, 404, 410].includes(status) || status && status < 500) { finish(reject, err); return; }
+                if ([401, 403, 404, 410].includes(status) || status && status < 500 && status !== 429) { finish(reject, err); return; }
                 retries += 1;
-                pollTimer.current = setTimeout(poll, Math.min(POLL_INTERVAL_MS * 2 ** retries, 10000));
+                pollTimer.current = setTimeout(poll, retryDelay(err, retries));
             }
         };
         poll();

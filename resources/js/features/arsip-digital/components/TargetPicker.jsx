@@ -27,10 +27,17 @@ const defaultFilters = {
 };
 
 function csv(value) {
-    return String(value || '')
-        .split(',')
+    return [...new Set(String(value || '')
+        .split(/[,\n]/)
         .map((item) => item.trim())
-        .filter(Boolean);
+        .filter(Boolean))];
+}
+
+function statuses(value) {
+    return [...new Set(csv(value).map((item) => {
+        const normalized = item.toLowerCase();
+        return ['active', 'inactive'].includes(normalized) ? normalized : item.toUpperCase();
+    }))];
 }
 
 function normalizeIdentifier(target) {
@@ -53,7 +60,7 @@ function metaTotal(meta) {
 
 function normalizeInitialFilters(value, role) {
     const targetFilters = value?.target_filters || {};
-    const studentStatus = csv(targetFilters.student_status || targetFilters.status);
+    const studentStatus = statuses(targetFilters.student_status || targetFilters.status);
     return {
         ...defaultFilters,
         angkatan: role === 'mahasiswa' ? csv(targetFilters.angkatan).join(', ') : '',
@@ -64,6 +71,14 @@ function normalizeInitialFilters(value, role) {
 
 function targetQueryKey(filters) {
     return JSON.stringify(filters);
+}
+
+function controlledValueFingerprint(value, initialRole) {
+    return JSON.stringify({
+        target_role: ['mahasiswa', 'dosen'].includes(value?.target_role) ? value.target_role : initialRole,
+        scope_type: value?.scope_type === 'specific' ? 'specific' : 'filter',
+        target_identifiers: Array.isArray(value?.target_identifiers) ? value.target_identifiers.map(String) : [],
+    });
 }
 
 const TargetRow = memo(function TargetRow({ target, role, selected, invalid, invalidReason, disabled, onToggle }) {
@@ -86,7 +101,7 @@ function buildPayload(role, mode, filters, selectedIdentifiers) {
 
     if (mode === 'filter') {
         const angkatan = csv(filters.angkatan);
-        const status = csv(filters.status).map((item) => item.toUpperCase());
+        const status = statuses(filters.status);
 
         if (role === 'mahasiswa' && angkatan.length) targetFilters.angkatan = angkatan;
         if (status.length) targetFilters.student_status = status;
@@ -106,6 +121,8 @@ function TargetPicker({ value, onChange, initialRole = 'mahasiswa', disabled = f
     const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
     const roleRef = useRef(initialRole);
     const requestSequenceRef = useRef(0);
+    const controlledValueFingerprintRef = useRef(null);
+    const pendingControlledFingerprintRef = useRef(null);
 
     const fetchTargets = useCallback(async (filters, page = filters?.page || 1) => {
         const role = roleRef.current || initialRole;
@@ -113,7 +130,7 @@ function TargetPicker({ value, onChange, initialRole = 'mahasiswa', disabled = f
             role,
             search: filters.search,
             angkatan: role === 'mahasiswa' ? csv(filters.angkatan) : [],
-            status: csv(filters.status),
+            status: statuses(filters.status),
             has_account: filters.has_account === '' ? undefined : filters.has_account === '1',
             page,
             per_page: filters.per_page || 25,
@@ -176,19 +193,35 @@ function TargetPicker({ value, onChange, initialRole = 'mahasiswa', disabled = f
         if (Array.isArray(value?.target_identifiers)) {
             dispatch({ type: 'SELECT_ALL_FILTERED', payload: value.target_identifiers.map(String) });
         }
+        controlledValueFingerprintRef.current = controlledValueFingerprint(value, initialRole);
         setInitialized(true);
     }, [dispatch, initialRole, initialized, setFilters, setMode, setRole, value]);
 
     useEffect(() => {
         if (!initialized) return;
-        startTransition(() => onChange?.(payload));
-    }, [initialized, onChange, payload]);
+        const nextFingerprint = controlledValueFingerprint(value, initialRole);
+        if (nextFingerprint === controlledValueFingerprintRef.current) return;
+        controlledValueFingerprintRef.current = nextFingerprint;
+        pendingControlledFingerprintRef.current = nextFingerprint;
+        const nextRole = ['mahasiswa', 'dosen'].includes(value?.target_role) ? value.target_role : initialRole;
+        setRole(nextRole);
+        setMode(value?.scope_type === 'specific' ? 'specific' : 'filter');
+        dispatch({
+            type: 'SELECT_ALL_FILTERED',
+            payload: Array.isArray(value?.target_identifiers) ? value.target_identifiers.map(String) : [],
+        });
+    }, [dispatch, initialRole, initialized, setMode, setRole, value]);
 
     useEffect(() => {
-        if (!initialized || value?.scope_type !== 'specific' || !Array.isArray(value?.target_identifiers)) return;
-        const next = value.target_identifiers.map(String);
-        if (JSON.stringify(next) !== JSON.stringify(selectedIdentifiers)) dispatch({ type: 'SELECT_ALL_FILTERED', payload: next });
-    }, [dispatch, initialized, selectedIdentifiers, value?.scope_type, value?.target_identifiers]);
+        if (!initialized) return;
+        const nextFingerprint = controlledValueFingerprint(payload, initialRole);
+        if (pendingControlledFingerprintRef.current) {
+            if (nextFingerprint !== pendingControlledFingerprintRef.current) return;
+            pendingControlledFingerprintRef.current = null;
+        }
+        controlledValueFingerprintRef.current = nextFingerprint;
+        startTransition(() => onChange?.(payload));
+    }, [initialRole, initialized, onChange, payload]);
 
     const loadTargets = async (page = 1) => {
         const requestSequence = ++requestSequenceRef.current;
@@ -202,7 +235,7 @@ function TargetPicker({ value, onChange, initialRole = 'mahasiswa', disabled = f
                 role: requestedRole,
                 search: nextFilters.search,
                 angkatan: requestedRole === 'mahasiswa' ? csv(nextFilters.angkatan) : [],
-                status: csv(nextFilters.status),
+                status: statuses(nextFilters.status),
                 has_account: nextFilters.has_account === '' ? undefined : nextFilters.has_account === '1',
                 page,
                 per_page: nextFilters.per_page,
@@ -339,11 +372,11 @@ function TargetPicker({ value, onChange, initialRole = 'mahasiswa', disabled = f
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100">
-                        {state.targets.map((target) => {
+                        {state.targets.map((target, index) => {
                             const identifier = normalizeIdentifier(target);
                             return (
                                 <TargetRow
-                                    key={identifier}
+                                    key={`${identifier}-${index}`}
                                     target={target}
                                     role={role}
                                     selected={selectedIdentifierSet.has(identifier)}

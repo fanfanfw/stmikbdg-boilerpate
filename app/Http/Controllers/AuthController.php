@@ -118,22 +118,23 @@ class AuthController extends Controller
 
     private function redirectToVerifyPage()
     {
-        return redirect()->away(
-            config('myconfig.login.base_url').'verify?site='.config('app.url')
-        );
+        return redirect()->away(self::loginUrl('verify'));
     }
 
     private function redirectToLogin()
     {
-        return redirect()->away(
-            config('myconfig.login.base_url').'login?site='.config('app.url')
-        );
+        return redirect()->away(self::loginUrl('login'));
     }
 
     private function redirectToLogout()
     {
-        return redirect()->away(
-            config('myconfig.login.base_url').'logout?site='.config('app.url')
-        );
+        return redirect()->away(self::loginUrl('logout'));
+    }
+
+    private static function loginUrl(string $path): string
+    {
+        return config('myconfig.login.base_url').$path.'?'.http_build_query([
+            'site' => config('app.url'),
+        ]);
     }
 }

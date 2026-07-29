@@ -109,6 +109,25 @@ class ArsipDigitalProxyTest extends TestCase
         $this->assertSame('zip-binary', $response->streamedContent());
     }
 
+    public function test_proxy_preserves_rate_limit_headers(): void
+    {
+        $this->withProxySession(['is_mhs' => true]);
+
+        Http::fake(fn () => Http::response(['message' => 'Too Many Attempts.'], 429, [
+            'Retry-After' => '7',
+            'X-RateLimit-Limit' => '20',
+            'X-RateLimit-Remaining' => '0',
+        ]));
+
+        $response = $this->withoutMiddleware(hasToken::class)
+            ->get('/arsip-digital/proxy/sign-sessions/1');
+
+        $response->assertStatus(429);
+        $this->assertSame('7', $response->headers->get('Retry-After'));
+        $this->assertSame('20', $response->headers->get('X-RateLimit-Limit'));
+        $this->assertSame('0', $response->headers->get('X-RateLimit-Remaining'));
+    }
+
     public function test_proxy_returns_backend_validation_errors_unchanged(): void
     {
         $this->withProxySession(['is_admin' => true]);

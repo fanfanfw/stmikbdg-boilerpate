@@ -177,10 +177,15 @@ class ArsipDigitalProxyController extends Controller
 
     private function toLaravelResponse(ClientResponse $response)
     {
-        $headers = collect($response->headers())
-            ->only(['content-type', 'content-disposition', 'cache-control'])
-            ->mapWithKeys(fn (array $value, string $key): array => [$key => $value[0] ?? ''])
-            ->filter()
+        $headers = collect([
+            'content-type',
+            'content-disposition',
+            'cache-control',
+            'retry-after',
+            'x-ratelimit-limit',
+            'x-ratelimit-remaining',
+        ])->mapWithKeys(fn (string $key): array => [$key => $response->header($key)])
+            ->filter(fn (?string $value): bool => $value !== null && $value !== '')
             ->toArray();
 
         $contentType = strtolower($headers['content-type'] ?? '');

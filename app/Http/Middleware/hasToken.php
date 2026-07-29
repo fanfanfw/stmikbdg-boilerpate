@@ -13,21 +13,22 @@ class hasToken
     /**
      * Handle an incoming request.
      *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     * @param  Closure(Request): (Response)  $next
      */
     public function handle(Request $request, Closure $next): Response
     {
         if (Session::exists('token')) {
-            $auth = new AuthService();
+            $auth = new AuthService;
             $token = Session::get('token');
             $checkToken = $auth->checkToken($token);
             $siteAccess = $auth->validateUserSiteAccess(config('app.url'));
 
             if ($siteAccess->getData('data')['status'] === 'fail') {
-                return redirect()
-                    ->away(config('myconfig.login.base_url')
-                        . 'verify?site='
-                        . config('app.url'));
+                return redirect()->away(
+                    config('myconfig.login.base_url').'verify?'.http_build_query([
+                        'site' => config('app.url'),
+                    ])
+                );
             }
 
             if ($checkToken->getData('data')['status'] !== 'success') {

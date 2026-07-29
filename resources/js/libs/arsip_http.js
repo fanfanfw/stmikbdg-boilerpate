@@ -126,6 +126,18 @@ export async function formatArsipError(error) {
         };
     }
 
+    if (status === 429) {
+        const retryAfter = Number(error.response?.headers?.['retry-after']);
+        return {
+            success: false,
+            message: Number.isFinite(retryAfter) && retryAfter > 0
+                ? `Terlalu banyak permintaan. Silakan coba lagi dalam ${Math.ceil(retryAfter)} detik.`
+                : 'Terlalu banyak permintaan. Tunggu beberapa saat, lalu coba lagi.',
+            errors: null,
+            status: 429,
+        };
+    }
+
     // 413 - Upload too large for PHP/web server limits
     if (status === 413) {
         return {
