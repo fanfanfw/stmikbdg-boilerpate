@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Http\Middleware\hasToken;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use Tests\TestCase;
 
@@ -128,9 +130,26 @@ class ArsipDigitalProxyTest extends TestCase
             ]);
     }
 
+    public function test_proxy_returns_stable_response_when_api_connection_fails(): void
+    {
+        $this->withProxySession(['is_admin' => true]);
+        Http::fake(fn () => throw new ConnectionException('Connection failed with token=secret'));
+        Log::spy();
+
+        $response = $this->withoutMiddleware(hasToken::class)
+            ->get('/arsip-digital/proxy/admin/requests');
+
+        $response->assertStatus(503)
+            ->assertExactJson([
+                'status' => 'fail',
+                'message' => 'Koneksi API tidak tersedia.',
+            ]);
+        Log::shouldHaveReceived('error')->once();
+    }
+
     private function withProxySession(array $role): void
     {
-        config(['app.key' => 'base64:' . base64_encode(str_repeat('a', 32))]);
+        config(['app.key' => 'base64:'.base64_encode(str_repeat('a', 32))]);
         config(['myconfig.api.base_url' => 'http://stmikbdg-api.test/api']);
         Session::put('token', 'jwt-smoke-token');
         Session::put('role', $role);

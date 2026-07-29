@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response as ClientResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 
 class ArsipDigitalProxyController extends Controller
@@ -33,18 +35,32 @@ class ArsipDigitalProxyController extends Controller
             ], 500);
         }
 
-        $targetUrl = $baseUrl . '/arsip-digital/' . ltrim((string) $path, '/');
+        $targetUrl = $baseUrl.'/arsip-digital/'.ltrim((string) $path, '/');
 
         $client = Http::withToken($token)
             ->withHeaders([
                 'X-Active-Role' => $activeRole,
                 'Accept' => $request->header('Accept', 'application/json'),
             ])
-            ->timeout(60);
+            ->connectTimeout(5)
+            ->timeout(120);
 
-        $response = $request->allFiles() !== []
-            ? $this->sendMultipart($client, $request, $targetUrl)
-            : $this->sendRegular($client, $request, $targetUrl);
+        try {
+            $response = $request->allFiles() !== []
+                ? $this->sendMultipart($client, $request, $targetUrl)
+                : $this->sendRegular($client, $request, $targetUrl);
+        } catch (ConnectionException $exception) {
+            Log::error('Koneksi API arsip digital tidak tersedia.', [
+                'route' => optional($request->route())->getName(),
+                'path' => $path,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return response()->json([
+                'status' => 'fail',
+                'message' => 'Koneksi API tidak tersedia.',
+            ], 503);
+        }
 
         return $this->toLaravelResponse($response);
     }
@@ -113,7 +129,7 @@ class ArsipDigitalProxyController extends Controller
             if (is_array($value)) {
                 foreach ($value as $index => $item) {
                     $fields[] = [
-                        'name' => $key . '[' . $index . ']',
+                        'name' => $key.'['.$index.']',
                         'contents' => (string) $item,
                     ];
                 }
@@ -140,7 +156,7 @@ class ArsipDigitalProxyController extends Controller
             if (is_array($file)) {
                 foreach ($file as $index => $item) {
                     $parts[] = [
-                        'name' => $field . '[' . $index . ']',
+                        'name' => $field.'['.$index.']',
                         'contents' => fopen($item->getRealPath(), 'r'),
                         'filename' => $item->getClientOriginalName(),
                     ];
@@ -173,7 +189,7 @@ class ArsipDigitalProxyController extends Controller
 
         if ($isBinary) {
             return response()->stream(function () use ($response): void {
-                print $response->body();
+                echo $response->body();
             }, $response->status(), $headers);
         }
 

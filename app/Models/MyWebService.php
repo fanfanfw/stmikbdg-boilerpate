@@ -2,39 +2,48 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Support\Facades\Session;
-
-// * Guzzle
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Exception\RequestException;
+// * Guzzle
 use GuzzleHttp\RequestOptions;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Session;
 
 class MyWebService
 {
     use HasFactory;
 
     protected $baseURL;
+
     protected $endPoints;
+
     protected $client;
+
     protected $fullURL;
 
-    public function __construct(string $endPoints) {
+    public function __construct(string $endPoints)
+    {
         $this->baseURL = config('myconfig.api.base_url');
         $this->endPoints = $endPoints;
-        $this->fullURL = $this->baseURL . $this->endPoints;
-        $this->client = new Client();
+        $this->fullURL = $this->baseURL.$this->endPoints;
+        $this->client = new Client([
+            RequestOptions::CONNECT_TIMEOUT => 5,
+            RequestOptions::TIMEOUT => 120,
+        ]);
     }
 
-    private function setHeaders(string $accessToken = null) {
+    private function setHeaders(?string $accessToken = null)
+    {
         return [
             'Content-Type' => 'application/json',
-            'Authorization' => 'Bearer ' . $accessToken
+            'Authorization' => 'Bearer '.$accessToken,
         ];
     }
 
-    private function setSuccessResponse($response) {
+    private function setSuccessResponse($response)
+    {
         $statusCode = $response->getStatusCode();
         $getBody = isset(json_decode($response->getBody())->data)
             ? json_decode($response->getBody())->data
@@ -50,7 +59,17 @@ class MyWebService
         ], $statusCode);
     }
 
-    private function setBadResponse($response) {
+    private function setBadResponse($response)
+    {
+        if (! $response->getResponse()) {
+            Log::error('Koneksi API tidak tersedia.', ['exception' => $response]);
+
+            return response()->json([
+                'status' => 'fail',
+                'message' => 'Koneksi API tidak tersedia.',
+            ], 503);
+        }
+
         $decodedResponse = json_decode($response->getResponse()->getBody());
         $statusCode = $response->getResponse()->getStatusCode();
         $message = isset($decodedResponse->message) ? $decodedResponse->message : null;
@@ -61,8 +80,9 @@ class MyWebService
         ], $statusCode);
     }
 
-    public function get($payload = null, string $query = null) {
-        $fullURL = $this->fullURL . ($query ? $query : '');
+    public function get($payload = null, ?string $query = null)
+    {
+        $fullURL = $this->fullURL.($query ? $query : '');
 
         if ($this->endPoints === 'authentications') {
             if ($query === '/check') {
@@ -94,8 +114,9 @@ class MyWebService
         }
     }
 
-    public function post($payload, string $query = null) {
-        $fullURL = $this->fullURL . ($query ? $query : '');
+    public function post($payload, ?string $query = null)
+    {
+        $fullURL = $this->fullURL.($query ? $query : '');
         $accessToken = Session::get('token');
 
         try {
@@ -112,8 +133,9 @@ class MyWebService
         }
     }
 
-    public function put($payload = null, string $query = null) {
-        $fullURL = $this->fullURL . ($query ? $query : '');
+    public function put($payload = null, ?string $query = null)
+    {
+        $fullURL = $this->fullURL.($query ? $query : '');
         $accessToken = Session::get('token');
 
         try {
@@ -133,8 +155,9 @@ class MyWebService
         }
     }
 
-    public function delete($payload = null, string $query = null) {
-        $fullURL = $this->fullURL . ($query ? $query : '');
+    public function delete($payload = null, ?string $query = null)
+    {
+        $fullURL = $this->fullURL.($query ? $query : '');
         $accessToken = Session::get('token');
 
         if ($this->endPoints === 'authentications') {
@@ -155,14 +178,15 @@ class MyWebService
         }
     }
 
-    public function postFile($filePath, string $query = null) {
-        $fullURL = $this->fullURL . ($query ? $query : '');
+    public function postFile($filePath, ?string $query = null)
+    {
+        $fullURL = $this->fullURL.($query ? $query : '');
         $accessToken = Session::get('token');
 
         try {
             $response = $this->client->post($fullURL, [
                 RequestOptions::HEADERS => [
-                    'Authorization' => 'Bearer ' . $accessToken,
+                    'Authorization' => 'Bearer '.$accessToken,
                 ],
                 RequestOptions::MULTIPART => [
                     [
