@@ -73,6 +73,14 @@ function canMoveFile(file) {
         && !file?.requestFile;
 }
 
+function canDeleteFile(file) {
+    return file?.is_current !== false
+        && file?.status === 'active'
+        && file?.source_type === 'personal'
+        && !file?.request_file
+        && !file?.requestFile;
+}
+
 function normalizeExtensions(value) {
     if (Array.isArray(value)) {
         return value
@@ -244,6 +252,7 @@ export default function PersonalArchive() {
     };
 
     const handleDelete = (file) => {
+        if (!canDeleteFile(file)) return;
         customSwal.question({
             title: 'Hapus file?',
             message: `Apakah Anda yakin ingin menghapus "${file.display_filename}"?`,
@@ -286,7 +295,7 @@ export default function PersonalArchive() {
     };
 
     const handleDeleteCategory = (category) => {
-        if (category.files_count > 0) return;
+        if (category.is_system || category.files_count > 0) return;
         customSwal.question({
             title: 'Hapus kategori?',
             message: `Kategori "${category.name}" akan dihapus.`,
@@ -359,12 +368,12 @@ export default function PersonalArchive() {
     };
 
     const bulkDelete = () => {
-        if (!selectedFiles.length) return;
+        if (!deletableSelectedFiles.length) return;
         customSwal.question({
             title: 'Hapus file terpilih?',
-            message: `${selectedFiles.length} file akan dihapus.`,
+            message: `${deletableSelectedFiles.length} file akan dihapus.`,
             callback: async () => {
-                for (const file of selectedFiles) {
+                for (const file of deletableSelectedFiles) {
                     await arsipApi.deleteFile(fileId(file), 'Dihapus bulk oleh pengguna');
                 }
                 customSwal.toast.success({ message: 'File terpilih berhasil dihapus' });
@@ -416,6 +425,10 @@ export default function PersonalArchive() {
     const selectedFiles = useMemo(
         () => visibleFiles.filter((file) => selectedFileIdSet.has(fileId(file))),
         [visibleFiles, selectedFileIdSet],
+    );
+    const deletableSelectedFiles = useMemo(
+        () => selectedFiles.filter(canDeleteFile),
+        [selectedFiles],
     );
     const canMoveSelection = selectedFiles.length > 0 && selectedFiles.every(canMoveFile);
 
@@ -633,15 +646,15 @@ export default function PersonalArchive() {
                                 <RestoreOutlined fontSize="small" />
                             </IconButton>
                         </Tooltip>
-                    ) : (
+                    ) : canDeleteFile(params.row) ? (
                         <Tooltip title="Hapus">
                             <IconButton size="small" color="error" aria-label="Hapus file" disabled={!fileId(params.row)} onClick={() => handleDelete(params.row)}>
                                 <DeleteOutlined fontSize="small" />
                             </IconButton>
                         </Tooltip>
-                    )}
+                    ) : null}
                 </div>
-            ) : (
+            ) : !params.row.is_system ? (
                 <Tooltip title={params.row.files_count > 0 ? 'Kategori harus kosong' : 'Hapus kategori'}>
                     <span>
                         <IconButton size="small" color="error" disabled={params.row.files_count > 0} onClick={() => handleDeleteCategory(params.row)}>
@@ -649,7 +662,7 @@ export default function PersonalArchive() {
                         </IconButton>
                     </span>
                 </Tooltip>
-            ),
+            ) : null,
         },
     ];
 
@@ -726,8 +739,8 @@ export default function PersonalArchive() {
                         <Button size="small" variant="outlined" disabled={!selectedFiles.length} startIcon={<DownloadOutlined />} onClick={bulkDownload} sx={{ textTransform: 'none', borderRadius: '0.5rem' }}>
                             Download ({selectedFiles.length})
                         </Button>
-                        <Button size="small" variant="outlined" color="error" disabled={!selectedFiles.length} startIcon={<DeleteOutlined />} onClick={bulkDelete} sx={{ textTransform: 'none', borderRadius: '0.5rem' }}>
-                            Hapus ({selectedFiles.length})
+                        <Button size="small" variant="outlined" color="error" disabled={!deletableSelectedFiles.length} startIcon={<DeleteOutlined />} onClick={bulkDelete} sx={{ textTransform: 'none', borderRadius: '0.5rem' }}>
+                            Hapus ({deletableSelectedFiles.length})
                         </Button>
                     </div>
                 </div>

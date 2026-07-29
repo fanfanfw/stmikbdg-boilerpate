@@ -88,7 +88,7 @@ export default function AdminArchive() {
             const responses = await Promise.all(roles.map((role) => arsipApi.adminTargets({
                 role,
                 search: filters.search,
-                status: filters.status,
+                ...(filters.status ? { status: [filters.status] } : {}),
                 has_account: true,
                 per_page: 50,
             })));
