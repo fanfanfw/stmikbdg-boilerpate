@@ -5,6 +5,7 @@ import AddOutlined from '@mui/icons-material/AddOutlined';
 import RefreshOutlined from '@mui/icons-material/RefreshOutlined';
 import BlockOutlined from '@mui/icons-material/BlockOutlined';
 import SendOutlined from '@mui/icons-material/SendOutlined';
+import AutorenewOutlined from '@mui/icons-material/AutorenewOutlined';
 import PageHeader from '../../../components/PageHeader';
 import CustomDataTable from '../../../components/CustomDataTable';
 import StatusChip from '../../../components/StatusChip';
@@ -14,7 +15,7 @@ import { formatArsipError } from '../../../libs/arsip_http';
 import { dateTime } from '../../../libs/format';
 
 const buttonSx = { borderRadius: '0.5rem', textTransform: 'none', fontFamily: 'Plus Jakarta Sans, sans-serif' };
-const emptyForm = { document_type: 'transcript', document_number: '', semester: '', student: null };
+const emptyForm = { document_type: 'transcript', document_number: '', semester: '', student: null, replaces_document_id: null, replacement_reason: '' };
 
 function unwrap(response, key) {
     return response?.data?.[key] ?? response?.data ?? response ?? {};
@@ -73,6 +74,33 @@ export default function AdminAcademicDocuments() {
         }
     };
 
+    const beginReplacement = async (document) => {
+        const student = {
+            mhs_id: document.subject_mhs_id,
+            identifier: document.subject_identifier,
+            name: document.subject_name_snapshot,
+        };
+        setForm({
+            document_type: document.document_type,
+            document_number: '',
+            semester: document.semester || '',
+            student,
+            replaces_document_id: document.official_document_id,
+            replacement_reason: '',
+        });
+        setStudents([]);
+        setStudentSearch('');
+        setSnapshot(null);
+        setDialogOpen(true);
+        try {
+            const response = await arsipApi.academicTranscript(student.mhs_id);
+            setSnapshot(response?.data ?? response);
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            customSwal.toast.error({ message: formatted.message });
+        }
+    };
+
     const distribute = async (document) => {
         const result = await Swal.fire({
             title: 'Distribusikan dokumen resmi?',
@@ -120,7 +148,7 @@ export default function AdminAcademicDocuments() {
     };
 
     const issue = async () => {
-        if (!form.student || !form.document_number || (form.document_type === 'khs' && !form.semester)) return;
+        if (!form.student || !form.document_number || (form.document_type === 'khs' && !form.semester) || (form.replaces_document_id && form.replacement_reason.trim().length < 5)) return;
         setSaving(true);
         try {
             await arsipApi.issueAcademicDocument({
@@ -128,6 +156,10 @@ export default function AdminAcademicDocuments() {
                 document_number: form.document_number,
                 mhs_id: form.student.mhs_id,
                 ...(form.document_type === 'khs' ? { semester: Number(form.semester) } : {}),
+                ...(form.replaces_document_id ? {
+                    replaces_document_id: form.replaces_document_id,
+                    replacement_reason: form.replacement_reason.trim(),
+                } : {}),
             });
             customSwal.toast.success({ message: 'Dokumen akademik resmi berhasil diterbitkan.' });
             setDialogOpen(false);
@@ -155,10 +187,11 @@ export default function AdminAcademicDocuments() {
         {
             field: 'actions',
             headerName: 'Aksi',
-            width: 240,
+            width: 330,
             sortable: false,
             renderCell: ({ row }) => row.status === 'issued' ? (
                 <div className="flex gap-1">
+                    <Button size="small" startIcon={<AutorenewOutlined />} onClick={() => beginReplacement(row)} sx={buttonSx}>Ganti</Button>
                     {!row.distribution && <Button size="small" startIcon={<SendOutlined />} onClick={() => distribute(row)} sx={buttonSx}>Distribusi</Button>}
                     <Button color="error" size="small" startIcon={<BlockOutlined />} onClick={() => revoke(row)} sx={buttonSx}>Cabut</Button>
                 </div>
@@ -173,7 +206,7 @@ export default function AdminAcademicDocuments() {
                 subtitle="Terbitkan KHS dan transkrip resmi dari snapshot data SIMAK."
                 actions={<>
                     <Button variant="outlined" startIcon={<RefreshOutlined />} onClick={loadDocuments} sx={buttonSx}>Muat Ulang</Button>
-                    <Button variant="contained" startIcon={<AddOutlined />} onClick={() => setDialogOpen(true)} sx={buttonSx}>Terbitkan</Button>
+                    <Button variant="contained" startIcon={<AddOutlined />} onClick={() => { setForm(emptyForm); setSnapshot(null); setStudents([]); setStudentSearch(''); setDialogOpen(true); }} sx={buttonSx}>Terbitkan</Button>
                 </>}
             />
             {error && <Alert severity="error" className="mb-4">{error}</Alert>}
@@ -182,12 +215,12 @@ export default function AdminAcademicDocuments() {
             </div>
 
             <Dialog open={dialogOpen} onClose={() => !saving && setDialogOpen(false)} fullWidth maxWidth="md">
-                <DialogTitle>Terbitkan Dokumen Akademik Resmi</DialogTitle>
+                <DialogTitle>{form.replaces_document_id ? 'Ganti Dokumen Akademik Resmi' : 'Terbitkan Dokumen Akademik Resmi'}</DialogTitle>
                 <DialogContent className="space-y-4 pt-3">
-                    <div className="flex gap-2 pt-2">
+                    {!form.replaces_document_id && <div className="flex gap-2 pt-2">
                         <TextField fullWidth size="small" label="Cari NIM atau nama mahasiswa" value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} />
                         <Button variant="outlined" disabled={searching} onClick={searchStudents} sx={buttonSx}>{searching ? 'Mencari...' : 'Cari'}</Button>
-                    </div>
+                    </div>}
                     {students.length > 0 && (
                         <div className="border border-zinc-200 rounded-lg divide-y max-h-48 overflow-auto">
                             {students.map((student) => (
@@ -199,20 +232,21 @@ export default function AdminAcademicDocuments() {
                         </div>
                     )}
                     {form.student && <Alert severity="info">Mahasiswa: {form.student.identifier} — {form.student.name}. Data SIMAK: {snapshot?.records?.length ?? 0} record nilai.</Alert>}
-                    <TextField select fullWidth size="small" label="Jenis dokumen" value={form.document_type} onChange={(event) => setForm((current) => ({ ...current, document_type: event.target.value, semester: '' }))}>
+                    <TextField select fullWidth size="small" label="Jenis dokumen" value={form.document_type} disabled={Boolean(form.replaces_document_id)} onChange={(event) => setForm((current) => ({ ...current, document_type: event.target.value, semester: '' }))}>
                         <MenuItem value="transcript">Transkrip Nilai</MenuItem>
                         <MenuItem value="khs">KHS</MenuItem>
                     </TextField>
                     {form.document_type === 'khs' && (
-                        <TextField select fullWidth size="small" label="Semester" value={form.semester} onChange={(event) => setForm((current) => ({ ...current, semester: event.target.value }))}>
+                        <TextField select fullWidth size="small" label="Semester" value={form.semester} disabled={Boolean(form.replaces_document_id)} onChange={(event) => setForm((current) => ({ ...current, semester: event.target.value }))}>
                             {[...new Set((snapshot?.records || []).map((record) => record.semester))].filter(Boolean).sort((a, b) => a - b).map((semester) => <MenuItem key={semester} value={semester}>Semester {semester}</MenuItem>)}
                         </TextField>
                     )}
                     <TextField fullWidth size="small" label="Nomor dokumen resmi" value={form.document_number} onChange={(event) => setForm((current) => ({ ...current, document_number: event.target.value }))} helperText="Gunakan nomor yang sudah ditetapkan admin akademik." />
+                    {form.replaces_document_id && <TextField fullWidth multiline minRows={3} size="small" label="Alasan penggantian" value={form.replacement_reason} onChange={(event) => setForm((current) => ({ ...current, replacement_reason: event.target.value }))} helperText="Minimal 5 karakter; alasan tampil pada verifikasi dokumen lama." />}
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDialogOpen(false)} disabled={saving} sx={buttonSx}>Batal</Button>
-                    <Button variant="contained" onClick={issue} disabled={saving || !snapshot || !form.student || !form.document_number || (form.document_type === 'khs' && !form.semester)} sx={buttonSx}>{saving ? 'Menerbitkan...' : 'Terbitkan Resmi'}</Button>
+                    <Button variant="contained" onClick={issue} disabled={saving || !snapshot || !form.student || !form.document_number || (form.document_type === 'khs' && !form.semester) || (form.replaces_document_id && form.replacement_reason.trim().length < 5)} sx={buttonSx}>{saving ? 'Menerbitkan...' : form.replaces_document_id ? 'Terbitkan Pengganti' : 'Terbitkan Resmi'}</Button>
                 </DialogActions>
             </Dialog>
         </div>
