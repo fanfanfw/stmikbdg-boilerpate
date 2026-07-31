@@ -138,6 +138,7 @@ export default function AdminRequestDetail() {
     const [appendOpen, setAppendOpen] = useState(false);
     const [appendPayload, setAppendPayload] = useState(null);
     const [appendPreview, setAppendPreview] = useState(null);
+    const [appendPickerSession, setAppendPickerSession] = useState(0);
     const [appendLoading, setAppendLoading] = useState(false);
 
     const filteredAssignments = assignments;
@@ -316,6 +317,24 @@ export default function AdminRequestDetail() {
         }
     };
 
+    const openAppendTargets = () => {
+        setAppendPayload({
+            target_role: request?.target_role || 'mahasiswa',
+            scope_type: 'specific',
+            target_filters: {},
+            target_identifiers: [],
+        });
+        setAppendPreview(null);
+        setAppendPickerSession((session) => session + 1);
+        setAppendOpen(true);
+    };
+
+    const closeAppendTargets = () => {
+        setAppendOpen(false);
+        setAppendPayload(null);
+        setAppendPreview(null);
+    };
+
     const previewAppendTargets = async () => {
         if (!appendPayload) return;
         setAppendLoading(true);
@@ -331,13 +350,17 @@ export default function AdminRequestDetail() {
     };
 
     const appendTargets = async () => {
-        if (!appendPayload || !(await confirmAction('Tambah target?', 'Target tambahan valid akan dibuat sebagai assignment.', 'Tambahkan'))) return;
+        const selectedCount = appendPayload?.target_identifiers?.length ?? 0;
+        if (appendPayload?.scope_type !== 'specific' || selectedCount < 1) {
+            customSwal.toast.error({ message: 'Pilih minimal satu target spesifik.' });
+            return;
+        }
+        if (!(await confirmAction('Tambah target?', `${selectedCount} target terpilih akan diproses.`, 'Tambahkan'))) return;
         setAppendLoading(true);
         try {
             await arsipApi.appendRequestTargets(requestId(request), appendPayload);
             customSwal.toast.success({ message: 'Target tambahan berhasil diproses.' });
-            setAppendOpen(false);
-            setAppendPreview(null);
+            closeAppendTargets();
             await refreshAll();
         } catch (err) {
             const formatted = await formatArsipError(err);
@@ -423,7 +446,7 @@ export default function AdminRequestDetail() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                     {request?.status === 'draft' && <Button disabled={actionLoading} variant="contained" onClick={() => runLifecycle(arsipApi.publishRequest, 'Publish request?', 'Assignment akan dibuat untuk target request ini.', 'Request berhasil dipublish.')} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Publish</Button>}
-                    {request?.status === 'published' && <Button disabled={actionLoading} variant="outlined" onClick={() => setAppendOpen(true)} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Tambah Target</Button>}
+                    {request?.status === 'published' && <Button disabled={actionLoading} variant="outlined" onClick={openAppendTargets} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Tambah Target</Button>}
                     {request?.status === 'published' && <Button disabled={actionLoading} variant="outlined" onClick={() => runLifecycle(arsipApi.closeRequest, 'Tutup request?', 'Penerima tidak bisa upload file baru.', 'Request berhasil ditutup.')} sx={{ ...buttonSx, borderColor: '#e4e4e7', color: '#3f3f46' }}>Tutup</Button>}
                     {request?.status === 'closed' && <Button disabled={actionLoading} variant="contained" onClick={() => runLifecycle(arsipApi.reopenRequest, 'Buka lagi request?', 'Request akan aktif kembali.', 'Request berhasil dibuka lagi.')} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Reopen</Button>}
                     {['draft', 'closed'].includes(request?.status) && <Button disabled={actionLoading} color="warning" onClick={() => runLifecycle(arsipApi.archiveRequest, 'Arsipkan request?', 'Request akan menjadi read-only.', 'Request berhasil diarsipkan.')} sx={buttonSx}>Arsipkan</Button>}
@@ -485,10 +508,10 @@ export default function AdminRequestDetail() {
                 />
             </section>
 
-            <Dialog open={appendOpen} onClose={() => setAppendOpen(false)} fullWidth maxWidth="lg">
+            <Dialog open={appendOpen} onClose={closeAppendTargets} fullWidth maxWidth="lg">
                 <DialogTitle className="!font-jakarta">Tambah Target</DialogTitle>
                 <DialogContent dividers className="space-y-4">
-                    <TargetPicker initialRole={request?.target_role || 'mahasiswa'} value={{ target_role: request?.target_role || 'mahasiswa', scope_type: 'filter', target_filters: {}, target_identifiers: [] }} onChange={setAppendPayload} disabled={request?.status !== 'published'} />
+                    {appendPayload && <TargetPicker key={appendPickerSession} initialRole={request?.target_role || 'mahasiswa'} value={appendPayload} onChange={(payload) => { setAppendPayload(payload); setAppendPreview(null); }} disabled={request?.status !== 'published'} />}
                     <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 flex items-center justify-between gap-3 flex-wrap">
                         <div className="text-xs text-zinc-600">
                             <strong>Preview tambah target</strong>
@@ -498,8 +521,8 @@ export default function AdminRequestDetail() {
                     </div>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setAppendOpen(false)} sx={buttonSx}>Batal</Button>
-                    <Button variant="contained" disabled={appendLoading || request?.status !== 'published'} onClick={appendTargets} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Tambahkan</Button>
+                    <Button onClick={closeAppendTargets} sx={buttonSx}>Batal</Button>
+                    <Button variant="contained" disabled={appendLoading || request?.status !== 'published' || appendPayload?.scope_type !== 'specific' || !appendPayload?.target_identifiers?.length} onClick={appendTargets} sx={{ ...buttonSx, backgroundColor: '#2563eb' }}>Tambahkan</Button>
                 </DialogActions>
             </Dialog>
 

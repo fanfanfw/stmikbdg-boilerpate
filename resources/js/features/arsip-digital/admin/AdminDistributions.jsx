@@ -252,6 +252,28 @@ export default function AdminDistributions() {
         }
     };
 
+    const removeTargetIdentifier = (identifier) => {
+        const currentPayload = targetPayloadRef.current;
+        const nextIdentifiers = (currentPayload?.target_identifiers || []).filter((item) => String(item) !== String(identifier));
+        const nextPayload = { ...currentPayload, scope_type: 'specific', target_identifiers: nextIdentifiers };
+        targetPayloadRef.current = nextPayload;
+        setTargetInitialValue(nextPayload);
+        setTargetPickerSession((session) => session + 1);
+        setPreview((current) => {
+            if (!current) return current;
+            const validTargets = (current.valid_targets || []).filter((target) => String(target.identifier) !== String(identifier));
+            const invalidTargets = (current.invalid_targets || []).filter((target) => String(target.identifier) !== String(identifier));
+            return {
+                ...current,
+                total_valid: validTargets.length,
+                total_invalid: invalidTargets.length,
+                total_targets: validTargets.length + invalidTargets.length,
+                valid_targets: validTargets,
+                invalid_targets: invalidTargets,
+            };
+        });
+    };
+
     const saveDistribution = async () => {
         if (!form.title.trim()) {
             customSwal.toast.error({ message: 'Judul wajib diisi.' });
@@ -528,6 +550,7 @@ export default function AdminDistributions() {
         ...(preview.valid_targets || []).map((target) => ({ ...target, valid: true })),
     ] : [];
     const visiblePreviewTargetRows = previewTargetRows.slice(0, 200);
+    const canRemovePreviewTarget = targetPayloadRef.current?.scope_type === 'specific';
 
     return (
         <div className="font-jakarta">
@@ -555,7 +578,7 @@ export default function AdminDistributions() {
                             <strong>Daftar preview target</strong>
                             {previewTargetRows.length > visiblePreviewTargetRows.length && <p className="mt-1 text-zinc-500">Menampilkan {visiblePreviewTargetRows.length} dari {previewTargetRows.length} target.</p>}
                             <div className="mt-2 max-h-48 overflow-y-auto divide-y divide-zinc-100">
-                                {visiblePreviewTargetRows.map((target) => <div key={`${target.valid ? 'valid' : 'invalid'}-${target.identifier}`} className={`py-2 ${target.valid ? '' : 'text-red-700'}`}><b>{target.identifier}</b> · {target.name_snapshot || target.name || target.reason || 'Valid'}</div>)}
+                                {visiblePreviewTargetRows.map((target) => <div key={`${target.valid ? 'valid' : 'invalid'}-${target.identifier}`} className={`flex items-center justify-between gap-3 py-2 ${target.valid ? '' : 'text-red-700'}`}><span><b>{target.identifier}</b> · {target.name_snapshot || target.name || target.reason || 'Valid'}</span>{canRemovePreviewTarget && <Button size="small" color="error" onClick={() => removeTargetIdentifier(target.identifier)} sx={buttonSx}>Batalkan</Button>}</div>)}
                             </div>
                         </div>
                     )}
