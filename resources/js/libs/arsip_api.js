@@ -5,7 +5,6 @@ import {
     deleteJson,
     uploadFormData,
     downloadBlob,
-    getBlob,
 } from './arsip_http';
 
 // --------------------------------------------------------------------------
@@ -48,34 +47,6 @@ export const arsipApi = {
     },
     deleteFile: (id, reason) => deleteJson(`/files/${id}`, { reason }),
     restoreFile: (id) => postJson(`/files/${id}/restore`),
-
-    signingSource: (fileId) => getBlob(`/files/${fileId}/download`),
-    createSigningSession: (payload, multipart = false) => multipart
-        ? uploadFormData('/pdf-sign-sessions', payload)
-        : postJson('/pdf-sign-sessions', payload),
-    finalizeSigning: (id, formData) => uploadFormData(`/pdf-sign-sessions/${id}/finalize`, formData),
-    signingSession: (id) => getJson(`/pdf-sign-sessions/${id}`),
-    downloadSignedFile: (id, filename) => downloadBlob(`/pdf-sign-sessions/${id}/download`, filename),
-    saveSignedFile: (id, payload = {}) => postJson(`/pdf-sign-sessions/${id}/save`, payload),
-
-    signatureRequestConfig: () => getJson('/signature-request-config'),
-    signatureRequests: (params) => getJson('/signature-requests', params),
-    signatureRequestDetail: (id) => getJson(`/signature-requests/${id}`),
-    signatureRequestLecturers: () => getJson('/signature-request-lecturers'),
-    createSignatureRequest: (payload) => postJson('/signature-requests', payload),
-    updateSignatureRequest: (id, payload) => putJson(`/signature-requests/${id}`, payload),
-    deleteSignatureRequest: (id) => deleteJson(`/signature-requests/${id}`),
-    signatureRequestAvailability: () => getJson('/lecturer/signature-request-availability'),
-    updateSignatureRequestAvailability: (isAvailable) => putJson('/lecturer/signature-request-availability', { is_available: isAvailable }),
-    acceptSignatureRequest: (id) => postJson(`/lecturer/signature-requests/${id}/accept`),
-    rejectSignatureRequest: (id, reason) => postJson(`/lecturer/signature-requests/${id}/reject`, { reason }),
-    bulkSignatureRequests: (ids, action, reason) => postJson('/lecturer/signature-requests/bulk', { ids, action, ...(reason ? { reason } : {}) }),
-    createRequestSigningSession: (fileId) => postJson(`/lecturer/signature-request-files/${fileId}/session`),
-    requestSigningSource: (fileId) => getBlob(`/signature-request-files/${fileId}/source`),
-    finalizeRequestSigning: (sessionId, formData) => uploadFormData(`/pdf-sign-sessions/${sessionId}/finalize`, formData),
-    sendSignatureRequest: (id) => postJson(`/lecturer/signature-requests/${id}/send`),
-    downloadSignatureRequestSource: (file) => downloadBlob(`/signature-request-files/${file?.signature_request_file_id ?? file?.id}/source`, file?.display_filename || file?.original_filename || file?.filename || 'dokumen.pdf'),
-    downloadSignatureRequestResult: (file) => downloadBlob(`/signature-request-files/${file?.signature_request_file_id ?? file?.id}/result`, file?.result_filename || file?.display_filename || file?.original_filename || file?.filename || 'dokumen-ditandatangani.pdf'),
 
     // Admin Requests
     adminRequests: (params) => getJson('/admin/requests', params),

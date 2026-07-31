@@ -17,14 +17,11 @@ import {
     PersonOutlined,
     AppsOutlined,
     ManageAccountsOutlined,
-    DrawOutlined,
 } from "@mui/icons-material";
 
 const userMenuItems = [
     { label: 'Dashboard', path: '/home', icon: DashboardOutlined },
     { label: 'Arsip Saya', path: '/home/arsip-saya', icon: FolderOutlined },
-    { label: 'Tanda Tangan PDF', path: '/home/tanda-tangan', icon: DrawOutlined },
-    { label: 'Request Tanda Tangan', path: '/home/request-tanda-tangan', icon: DrawOutlined },
     { label: 'Permintaan Berkas', path: '/home/permintaan', icon: DescriptionOutlined },
     { label: 'Berkas Kampus', path: '/home/distribusi', icon: LocalShippingOutlined },
 ];
@@ -32,7 +29,6 @@ const userMenuItems = [
 const adminMenuItems = [
     { label: 'Dashboard', path: '/home', icon: DashboardOutlined },
     { label: 'Arsip Pengguna', path: '/home/arsip-pengguna', icon: FolderOutlined },
-    { label: 'Tanda Tangan PDF', path: '/home/tanda-tangan', icon: DrawOutlined },
     { label: 'Permintaan Berkas', path: '/home/permintaan', icon: DescriptionOutlined },
     { label: 'Distribusi Berkas', path: '/home/distribusi', icon: LocalShippingOutlined },
     { label: 'Audit Log', path: '/home/audit', icon: HistoryOutlined },

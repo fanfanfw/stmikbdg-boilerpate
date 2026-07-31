@@ -18,8 +18,6 @@ import AdminAudit from "./admin/AdminAudit";
 import AdminSettings from "./admin/AdminSettings";
 
 import NotAllowed from "./common/NotAllowed";
-import SelfSigning from "./common/SelfSigning";
-import SignatureRequests, { SignatureRequestDetail } from "./user/SignatureRequests";
 
 export default function ArsipDigitalRoutes() {
     const { role } = useUser();
@@ -37,7 +35,6 @@ export default function ArsipDigitalRoutes() {
                 <Route path="/home/distribusi" element={<AdminDistributions />} />
                 <Route path="/home/audit" element={<AdminAudit />} />
                 <Route path="/home/pengaturan" element={<AdminSettings />} />
-                <Route path="/home/tanda-tangan" element={<SelfSigning />} />
                 <Route path="*" element={<NotAllowed />} />
             </Routes>
         );
@@ -52,10 +49,6 @@ export default function ArsipDigitalRoutes() {
                 <Route path="/home/permintaan" element={<UserRequests />} />
                 <Route path="/home/permintaan/:id" element={<UserRequestDetail />} />
                 <Route path="/home/distribusi" element={<UserDistributions />} />
-                <Route path="/home/tanda-tangan" element={<SelfSigning />} />
-                <Route path="/home/request-tanda-tangan" element={<SignatureRequests />} />
-                <Route path="/home/request-tanda-tangan/:id" element={<SignatureRequestDetail />} />
-                <Route path="/home/request-tanda-tangan/:requestId/tanda-tangan/:fileId" element={<SelfSigning requestMode />} />
                 <Route path="*" element={<NotAllowed />} />
             </Routes>
         );
