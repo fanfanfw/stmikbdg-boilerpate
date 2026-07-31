@@ -4,6 +4,7 @@ import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuI
 import AddOutlined from '@mui/icons-material/AddOutlined';
 import RefreshOutlined from '@mui/icons-material/RefreshOutlined';
 import BlockOutlined from '@mui/icons-material/BlockOutlined';
+import SendOutlined from '@mui/icons-material/SendOutlined';
 import PageHeader from '../../../components/PageHeader';
 import CustomDataTable from '../../../components/CustomDataTable';
 import StatusChip from '../../../components/StatusChip';
@@ -72,6 +73,27 @@ export default function AdminAcademicDocuments() {
         }
     };
 
+    const distribute = async (document) => {
+        const result = await Swal.fire({
+            title: 'Distribusikan dokumen resmi?',
+            text: 'Dokumen akan tersedia pada akun mahasiswa pemiliknya.',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Distribusikan',
+            cancelButtonText: 'Batal',
+        });
+        if (!result.isConfirmed) return;
+
+        try {
+            await arsipApi.distributeAcademicDocument(document.official_document_id);
+            customSwal.toast.success({ message: 'Dokumen resmi berhasil didistribusikan.' });
+            await loadDocuments();
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            customSwal.toast.error({ message: formatted.message });
+        }
+    };
+
     const revoke = async (document) => {
         const result = await Swal.fire({
             title: 'Cabut dokumen resmi?',
@@ -133,10 +155,13 @@ export default function AdminAcademicDocuments() {
         {
             field: 'actions',
             headerName: 'Aksi',
-            width: 130,
+            width: 240,
             sortable: false,
             renderCell: ({ row }) => row.status === 'issued' ? (
-                <Button color="error" size="small" startIcon={<BlockOutlined />} onClick={() => revoke(row)} sx={buttonSx}>Cabut</Button>
+                <div className="flex gap-1">
+                    {!row.distribution && <Button size="small" startIcon={<SendOutlined />} onClick={() => distribute(row)} sx={buttonSx}>Distribusi</Button>}
+                    <Button color="error" size="small" startIcon={<BlockOutlined />} onClick={() => revoke(row)} sx={buttonSx}>Cabut</Button>
+                </div>
             ) : '-',
         },
     ];
