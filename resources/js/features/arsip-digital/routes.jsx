@@ -14,6 +14,7 @@ import AdminArchive from "./admin/AdminArchive";
 import AdminRequests from "./admin/AdminRequests";
 import AdminRequestDetail from "./admin/AdminRequestDetail";
 import AdminDistributions from "./admin/AdminDistributions";
+import AdminAcademicDocuments from "./admin/AdminAcademicDocuments";
 import AdminAudit from "./admin/AdminAudit";
 import AdminSettings from "./admin/AdminSettings";
 
@@ -33,6 +34,7 @@ export default function ArsipDigitalRoutes() {
                 <Route path="/home/permintaan" element={<AdminRequests />} />
                 <Route path="/home/permintaan/:id" element={<AdminRequestDetail />} />
                 <Route path="/home/distribusi" element={<AdminDistributions />} />
+                <Route path="/home/dokumen-akademik" element={<AdminAcademicDocuments />} />
                 <Route path="/home/audit" element={<AdminAudit />} />
                 <Route path="/home/pengaturan" element={<AdminSettings />} />
                 <Route path="*" element={<NotAllowed />} />

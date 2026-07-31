@@ -17,6 +17,7 @@ import {
     PersonOutlined,
     AppsOutlined,
     ManageAccountsOutlined,
+    ArticleOutlined,
 } from "@mui/icons-material";
 
 const userMenuItems = [
@@ -31,6 +32,7 @@ const adminMenuItems = [
     { label: 'Arsip Pengguna', path: '/home/arsip-pengguna', icon: FolderOutlined },
     { label: 'Permintaan Berkas', path: '/home/permintaan', icon: DescriptionOutlined },
     { label: 'Distribusi Berkas', path: '/home/distribusi', icon: LocalShippingOutlined },
+    { label: 'Dokumen Akademik', path: '/home/dokumen-akademik', icon: ArticleOutlined },
     { label: 'Audit Log', path: '/home/audit', icon: HistoryOutlined },
     { label: 'Pengaturan', path: '/home/pengaturan', icon: SettingsOutlined },
 ];

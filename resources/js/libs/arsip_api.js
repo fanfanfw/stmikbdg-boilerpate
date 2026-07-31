@@ -20,6 +20,10 @@ export const arsipApi = {
     summary: () => getJson('/me/archive-summary'),
     settings: () => getJson('/admin/settings'),
     updateSettings: (payload) => putJson('/admin/settings', payload),
+    academicDocuments: (params) => getJson('/admin/academic-documents', params),
+    academicDocument: (id) => getJson(`/admin/academic-documents/${id}`),
+    academicTranscript: (mhsId) => getJson(`/admin/academic-documents/students/${mhsId}/transcript`),
+    issueAcademicDocument: (payload) => postJson('/admin/academic-documents', payload),
 
     // Categories
     categories: (params) => getJson('/categories', params),
