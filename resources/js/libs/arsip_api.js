@@ -24,6 +24,7 @@ export const arsipApi = {
     academicDocument: (id) => getJson(`/admin/academic-documents/${id}`),
     academicTranscript: (mhsId) => getJson(`/admin/academic-documents/students/${mhsId}/transcript`),
     issueAcademicDocument: (payload) => postJson('/admin/academic-documents', payload),
+    revokeAcademicDocument: (id, reason) => postJson(`/admin/academic-documents/${id}/revoke`, { reason }),
 
     // Categories
     categories: (params) => getJson('/categories', params),

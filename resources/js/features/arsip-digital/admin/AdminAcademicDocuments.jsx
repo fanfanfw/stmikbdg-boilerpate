@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import Swal from 'sweetalert2';
 import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, TextField } from '@mui/material';
 import AddOutlined from '@mui/icons-material/AddOutlined';
 import RefreshOutlined from '@mui/icons-material/RefreshOutlined';
+import BlockOutlined from '@mui/icons-material/BlockOutlined';
 import PageHeader from '../../../components/PageHeader';
 import CustomDataTable from '../../../components/CustomDataTable';
 import StatusChip from '../../../components/StatusChip';
@@ -70,6 +72,31 @@ export default function AdminAcademicDocuments() {
         }
     };
 
+    const revoke = async (document) => {
+        const result = await Swal.fire({
+            title: 'Cabut dokumen resmi?',
+            text: 'QR dokumen akan berubah menjadi tidak valid.',
+            icon: 'warning',
+            input: 'textarea',
+            inputLabel: 'Alasan pencabutan',
+            inputPlaceholder: 'Jelaskan alasan pencabutan dokumen',
+            showCancelButton: true,
+            confirmButtonText: 'Cabut Dokumen',
+            cancelButtonText: 'Batal',
+            inputValidator: (value) => (!value || value.trim().length < 5 ? 'Alasan minimal 5 karakter.' : undefined),
+        });
+        if (!result.isConfirmed) return;
+
+        try {
+            await arsipApi.revokeAcademicDocument(document.official_document_id, result.value.trim());
+            customSwal.toast.success({ message: 'Dokumen resmi berhasil dicabut.' });
+            await loadDocuments();
+        } catch (err) {
+            const formatted = await formatArsipError(err);
+            customSwal.toast.error({ message: formatted.message });
+        }
+    };
+
     const issue = async () => {
         if (!form.student || !form.document_number || (form.document_type === 'khs' && !form.semester)) return;
         setSaving(true);
@@ -103,6 +130,15 @@ export default function AdminAcademicDocuments() {
         { field: 'semester', headerName: 'Semester', width: 100, valueFormatter: (value) => value || '-' },
         { field: 'status', headerName: 'Status', width: 120, renderCell: ({ value }) => <StatusChip status={value} /> },
         { field: 'issued_at', headerName: 'Diterbitkan', width: 180, valueFormatter: (value) => dateTime(value) },
+        {
+            field: 'actions',
+            headerName: 'Aksi',
+            width: 130,
+            sortable: false,
+            renderCell: ({ row }) => row.status === 'issued' ? (
+                <Button color="error" size="small" startIcon={<BlockOutlined />} onClick={() => revoke(row)} sx={buttonSx}>Cabut</Button>
+            ) : '-',
+        },
     ];
 
     return (
