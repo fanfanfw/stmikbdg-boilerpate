@@ -4,6 +4,8 @@ import {
     putJson,
     deleteJson,
     uploadFormData,
+    getBlob,
+    postBlob,
     downloadBlob,
 } from './arsip_http';
 
@@ -22,6 +24,11 @@ export const arsipApi = {
     updateSettings: (payload) => putJson('/admin/settings', payload),
     academicDocuments: (params) => getJson('/admin/academic-documents', params),
     academicDocument: (id) => getJson(`/admin/academic-documents/${id}`),
+    academicDocumentSigners: (params) => getJson('/admin/academic-documents/signers', params),
+    nextAcademicDocumentNumber: (documentType) => getJson('/admin/academic-documents/next-number', { document_type: documentType }),
+    previewAcademicDocumentDraft: (payload) => postBlob('/admin/academic-documents/preview', payload),
+    previewAcademicDocument: (id) => getBlob(`/admin/academic-documents/${id}/preview`),
+    downloadAcademicDocument: (id, filename) => downloadBlob(`/admin/academic-documents/${id}/download`, filename),
     academicTranscript: (mhsId) => getJson(`/admin/academic-documents/students/${mhsId}/transcript`),
     issueAcademicDocument: (payload) => postJson('/admin/academic-documents', payload),
     distributeAcademicDocument: (id) => postJson(`/admin/academic-documents/${id}/distribute`),

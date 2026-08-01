@@ -10,6 +10,7 @@ const colorMap = {
     file_uploaded: 'success',
     available: 'success',
     downloaded: 'success',
+    issued: 'success',
 
     pending: 'warning',
     processing: 'warning',
@@ -24,6 +25,7 @@ const colorMap = {
     expired: 'error',
     late: 'error',
     revoked: 'error',
+    replaced: 'error',
 
     draft: 'default',
     archived: 'default',

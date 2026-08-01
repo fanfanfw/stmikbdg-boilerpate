@@ -235,6 +235,16 @@ export async function uploadFormData(path, formData, options = {}) {
     return normalizeArsipResponse(response);
 }
 
+export async function postBlob(path, payload, options = {}) {
+    const response = await client.post(path, payload, {
+        responseType: 'blob',
+        timeout: 120_000,
+        ...options,
+    });
+
+    return response.data;
+}
+
 export async function getBlob(path, options = {}) {
     const response = await retryGet(() => client.get(path, {
         responseType: 'blob',
