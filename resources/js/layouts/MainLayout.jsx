@@ -30,6 +30,7 @@ const userMenuItems = [
 const adminMenuItems = [
     { label: 'Dashboard', path: '/home', icon: DashboardOutlined },
     { label: 'Arsip Pengguna', path: '/home/arsip-pengguna', icon: FolderOutlined },
+    { label: 'Arsip Lembaga', path: '/home/arsip-lembaga', icon: ArticleOutlined },
     { label: 'Permintaan Berkas', path: '/home/permintaan', icon: DescriptionOutlined },
     { label: 'Distribusi Berkas', path: '/home/distribusi', icon: LocalShippingOutlined },
     { label: 'Dokumen Akademik', path: '/home/dokumen-akademik', icon: ArticleOutlined },

@@ -9,10 +9,10 @@ const pageSize = 100;
 const maxPages = 100;
 const maxItems = pageSize * maxPages;
 
-async function fetchAllPages(request, key) {
+export async function fetchAllPages(request, key, withDeleted = true) {
     const items = [];
     for (let page = 1; page <= maxPages; page += 1) {
-        const response = await request({ with_deleted: true, per_page: pageSize, page });
+        const response = await request({ with_deleted: withDeleted, per_page: pageSize, page });
         const data = response.data || {};
         const pageItems = data[key] || [];
         const pagination = data.pagination;

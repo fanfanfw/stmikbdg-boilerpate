@@ -1,0 +1,45 @@
+import { useEffect, useState } from 'react';
+import { Alert, Button, MenuItem, TextField } from '@mui/material';
+import { Link, useParams } from 'react-router-dom';
+import PageHeader from '../../../components/PageHeader';
+import { arsipApi } from '../../../libs/arsip_api';
+import { formatArsipError } from '../../../libs/arsip_http';
+import { fetchAllPages } from './InstitutionalClassificationSettings';
+import { runDownload, validationErrors } from './institutionalArchiveUi';
+
+const metadataFields = ['title', 'document_number', 'document_year', 'document_date', 'received_date', 'unit_id', 'description', 'access_level', 'retention_note', 'tags'];
+const metadataPayload = form => Object.fromEntries(metadataFields.map(key => [key, key === 'tags' ? String(form[key] || '').split(',').map(x => x.trim()).filter(Boolean) : form[key] === '' ? null : form[key]]));
+
+export default function AdminInstitutionalArchiveDetail() {
+    const { id } = useParams(); const [archive, setArchive] = useState(null); const [units, setUnits] = useState([]); const [categories, setCategories] = useState([]); const [form, setForm] = useState({}); const [moveCategory, setMoveCategory] = useState('');
+    const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [downloading, setDownloading] = useState(false); const [error, setError] = useState(''); const [success, setSuccess] = useState('');
+    const [metadataErrors, setMetadataErrors] = useState({}); const [moveErrors, setMoveErrors] = useState({});
+    const load = async () => { setLoading(true); setError(''); try { const response = await arsipApi.institutionalArchive(id); const item = response.data.archive; setArchive(item); setForm({ ...item, document_date: item.document_date?.slice(0, 10) || '', received_date: item.received_date?.slice(0, 10) || '', tags: (item.tags || []).join(', ') }); setMoveCategory(item.category_id || ''); } catch (e) { setError((await formatArsipError(e)).message); } finally { setLoading(false); } };
+    useEffect(() => { load(); Promise.all([fetchAllPages(arsipApi.institutionalUnits, 'units', false), fetchAllPages(arsipApi.institutionalCategories, 'categories', false)]).then(([u, c]) => { setUnits(u.filter(x => !x.deleted_at)); setCategories(c.filter(x => !x.deleted_at)); }).catch(async e => setError((await formatArsipError(e)).message)); }, [id]);
+    const run = async (action, message, setFieldErrors) => { if (saving) return; setSaving(true); setError(''); setFieldErrors({}); try { await action(); setSuccess(message); await load(); } catch (e) { const formatted = await formatArsipError(e); setError(formatted.message); setFieldErrors(validationErrors(formatted)); } finally { setSaving(false); } };
+    const preview = async () => { try { const blob = await arsipApi.previewInstitutionalArchive(id); const url = URL.createObjectURL(blob); const win = window.open(url, '_blank', 'noopener'); setTimeout(() => URL.revokeObjectURL(url), win ? 60000 : 0); } catch (e) { setError((await formatArsipError(e)).message); } };
+    const download = async () => { if (downloading) return; setDownloading(true); setError(''); await runDownload(() => arsipApi.downloadInstitutionalArchive(archive), setError, formatArsipError); setDownloading(false); };
+    if (loading) return <div className="p-4">Memuat detail arsip...</div>;
+    if (!archive) return <div className="p-4"><Alert severity="error">{error || 'Arsip tidak ditemukan.'}</Alert><Button component={Link} to="/home/arsip-lembaga">Kembali</Button></div>;
+    const file = archive.current_file;
+    const show = value => value === null || value === undefined || value === '' ? '-' : value;
+    const date = value => value ? new Date(value).toLocaleString('id-ID') : '-';
+    const tags = Array.isArray(archive.tags) && archive.tags.length ? archive.tags.join(', ') : '-';
+    return <div className="p-4 space-y-4"><PageHeader title={archive.title} subtitle="Detail Arsip Lembaga" />{error && <Alert severity="error">{error}</Alert>}{success && <Alert severity="success">{success}</Alert>}<Button component={Link} to="/home/arsip-lembaga">Kembali</Button>
+        <div className="grid md:grid-cols-2 gap-3 p-4 border rounded">
+            <div>Nomor dokumen: {show(archive.document_number)}</div><div>Tahun dokumen: {show(archive.document_year)}</div>
+            <div>Tanggal dokumen: {show(archive.document_date?.slice(0, 10))}</div><div>Tanggal diterima: {show(archive.received_date?.slice(0, 10))}</div>
+            <div>Unit: {show(archive.unit?.name)}</div><div>Folder: {archive.category?.name || 'Tanpa Folder'}</div>
+            <div>Akses: {show(archive.access_level)}</div><div>Tags: {tags}</div>
+            <div className="md:col-span-2">Deskripsi: {show(archive.description)}</div><div className="md:col-span-2">Catatan retensi: {show(archive.retention_note)}</div>
+            <div>Nama file: {show(file?.display_filename)}</div><div>Tipe file: {show(file?.mime_type)}</div>
+            <div>Ukuran file: {file?.file_size_bytes === null || file?.file_size_bytes === undefined ? '-' : `${file.file_size_bytes} byte`}</div><div>Versi: {show(file?.version_number)}</div>
+            <div>Ketersediaan storage: {show(file?.storage_availability)}</div><div>Uploader ID: {show(file?.uploaded_by_user_id)}</div>
+            <div>Creator ID: {show(archive.created_by_user_id)}</div><div>Updater ID: {show(archive.updated_by_user_id)}</div>
+            <div>Dibuat: {date(archive.created_at)}</div><div>Diperbarui: {date(archive.updated_at)}</div>
+        </div>
+        <div className="flex gap-2"><Button variant="outlined" onClick={preview}>Preview</Button><Button variant="outlined" disabled={downloading} onClick={download}>{downloading ? 'Mengunduh...' : 'Download'}</Button></div>
+        <h2 className="font-bold">Edit metadata</h2><div className="grid md:grid-cols-2 gap-3">{['title', 'document_number', 'document_year', 'document_date', 'received_date', 'description', 'retention_note', 'tags'].map(key => <TextField key={key} label={key.replaceAll('_', ' ')} type={key.includes('date') ? 'date' : key === 'document_year' ? 'number' : 'text'} InputLabelProps={key.includes('date') ? { shrink: true } : undefined} value={form[key] || ''} error={Boolean(metadataErrors[key])} helperText={metadataErrors[key]?.join(' ') || ' '} onChange={e => setForm({ ...form, [key]: e.target.value })} />)}<TextField select label="Unit" value={form.unit_id || ''} error={Boolean(metadataErrors.unit_id)} helperText={metadataErrors.unit_id?.join(' ') || ' '} onChange={e => setForm({ ...form, unit_id: e.target.value })}>{units.map(x => <MenuItem key={x.unit_id} value={x.unit_id}>{x.name}</MenuItem>)}</TextField><TextField select label="Akses" value={form.access_level || 'internal'} error={Boolean(metadataErrors.access_level)} helperText={metadataErrors.access_level?.join(' ') || ' '} onChange={e => setForm({ ...form, access_level: e.target.value })}><MenuItem value="internal">Internal</MenuItem><MenuItem value="restricted">Restricted</MenuItem></TextField></div><Button disabled={saving} variant="contained" onClick={() => run(() => arsipApi.updateInstitutionalArchive(id, metadataPayload(form)), 'Metadata berhasil diperbarui.', setMetadataErrors)}>Simpan metadata</Button>
+        <h2 className="font-bold">Pindah folder</h2><div className="flex gap-2"><TextField select label="Folder tujuan" value={moveCategory} error={Boolean(moveErrors.category_id)} helperText={moveErrors.category_id?.join(' ') || ' '} onChange={e => setMoveCategory(e.target.value)}><MenuItem value="">Tanpa Folder</MenuItem>{categories.map(x => <MenuItem key={x.category_id} value={x.category_id}>{x.name}</MenuItem>)}</TextField><Button disabled={saving} onClick={() => run(() => arsipApi.moveInstitutionalArchive(id, moveCategory), 'Arsip berhasil dipindahkan.', setMoveErrors)}>Pindahkan</Button></div>
+    </div>;
+}
