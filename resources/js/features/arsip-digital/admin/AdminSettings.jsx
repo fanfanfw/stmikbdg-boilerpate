@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Tab, Tabs, TextField } from '@mui/material';
 import SaveOutlined from '@mui/icons-material/SaveOutlined';
 import RefreshOutlined from '@mui/icons-material/RefreshOutlined';
@@ -28,12 +28,13 @@ function normalizeExtensions(value) {
         .filter(Boolean);
 }
 
-export default function AdminSettings() {
+export default function AdminSettings({ initialTab = 0 }) {
     const [form, setForm] = useState(defaultForm);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
-    const [tab, setTab] = useState(0);
+    const [tab, setTab] = useState(initialTab);
+    const settingsRequested = useRef(false);
 
     const loadSettings = async () => {
         setLoading(true);
@@ -58,8 +59,10 @@ export default function AdminSettings() {
     };
 
     useEffect(() => {
+        if (tab !== 0 || settingsRequested.current) return;
+        settingsRequested.current = true;
         loadSettings();
-    }, []);
+    }, [tab]);
 
     const updateField = (key, value) => {
         setForm((prev) => ({ ...prev, [key]: value }));
@@ -92,7 +95,7 @@ export default function AdminSettings() {
             <PageHeader
                 title="Pengaturan"
                 subtitle="Atur kuota arsip pribadi dan batas upload default. Kuota ini hanya berlaku untuk Arsip Saya, bukan Permintaan Berkas atau Distribusi."
-                actions={
+                actions={tab === 0 ? (
                     <Button
                         variant="outlined"
                         startIcon={<RefreshOutlined />}
@@ -102,7 +105,7 @@ export default function AdminSettings() {
                     >
                         Refresh
                     </Button>
-                }
+                ) : null}
             />
 
             <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ mb: 2 }}>

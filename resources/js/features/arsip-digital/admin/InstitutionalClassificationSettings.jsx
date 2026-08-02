@@ -1,10 +1,31 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, MenuItem, TextField } from '@mui/material';
 import { arsipApi } from '../../../libs/arsip_api';
 import { formatArsipError } from '../../../libs/arsip_http';
 
 const emptyUnit = { name: '', code: '', description: '' };
 const emptyFolder = { name: '', description: '', parent_category_id: '' };
+const pageSize = 100;
+const maxPages = 100;
+const maxItems = pageSize * maxPages;
+
+async function fetchAllPages(request, key) {
+    const items = [];
+    for (let page = 1; page <= maxPages; page += 1) {
+        const response = await request({ with_deleted: true, per_page: pageSize, page });
+        const data = response.data || {};
+        const pageItems = data[key] || [];
+        const pagination = data.pagination;
+        if (!pagination || !Number.isInteger(Number(pagination.current_page)) || !Number.isInteger(Number(pagination.last_page))) {
+            throw { response: { data: { message: 'Respons pagination struktur klasifikasi tidak valid.' } } };
+        }
+        items.push(...pageItems);
+        if (items.length > maxItems) throw { response: { data: { message: `Struktur klasifikasi melebihi batas aman ${maxItems} item.` } } };
+        if (Number(pagination.current_page) >= Number(pagination.last_page)) return items;
+        if (Number(pagination.last_page) > maxPages) throw { response: { data: { message: `Struktur klasifikasi melebihi batas aman ${maxPages} halaman.` } } };
+    }
+    throw { response: { data: { message: `Struktur klasifikasi melebihi batas aman ${maxPages} halaman.` } } };
+}
 
 export default function InstitutionalClassificationSettings() {
     const [units, setUnits] = useState([]);
@@ -17,25 +38,32 @@ export default function InstitutionalClassificationSettings() {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const loadSequence = useRef(0);
 
     const load = async () => {
+        const sequence = ++loadSequence.current;
         setLoading(true);
         setError('');
         try {
-            const [unitResponse, folderResponse] = await Promise.all([
-                arsipApi.institutionalUnits({ with_deleted: true, per_page: 100 }),
-                arsipApi.institutionalCategories({ with_deleted: true, per_page: 100 }),
+            const [allUnits, allFolders] = await Promise.all([
+                fetchAllPages(arsipApi.institutionalUnits, 'units'),
+                fetchAllPages(arsipApi.institutionalCategories, 'categories'),
             ]);
-            setUnits(unitResponse.data?.units || []);
-            setFolders(folderResponse.data?.categories || []);
+            if (sequence !== loadSequence.current) return;
+            setUnits(allUnits);
+            setFolders(allFolders);
         } catch (err) {
+            if (sequence !== loadSequence.current) return;
             setError((await formatArsipError(err)).message);
         } finally {
-            setLoading(false);
+            if (sequence === loadSequence.current) setLoading(false);
         }
     };
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => {
+        load();
+        return () => { loadSequence.current += 1; };
+    }, []);
 
     const run = async (action, message) => {
         setSaving(true);
@@ -87,10 +115,10 @@ export default function InstitutionalClassificationSettings() {
     const cancelUnitEdit = () => { setEditingUnitId(null); setUnit(emptyUnit); };
     const cancelFolderEdit = () => { setEditingFolderId(null); setFolder(emptyFolder); };
 
-    if (loading) return <div className="space-y-3"><p className="text-sm text-zinc-500">Memuat struktur klasifikasi...</p><Button size="small" onClick={load}>Muat Ulang</Button></div>;
+    if (loading) return <div className="space-y-3"><p className="text-sm text-zinc-500">Memuat struktur klasifikasi...</p><Button size="small" disabled onClick={load}>Muat Ulang</Button></div>;
 
     return <div className="space-y-5">
-        {error && <Alert severity="error" action={<Button color="inherit" size="small" onClick={load}>Coba Lagi</Button>}>{error}</Alert>}
+        {error && <Alert severity="error" action={<Button color="inherit" size="small" disabled={loading} onClick={load}>Coba Lagi</Button>}>{error}</Alert>}
         {success && <Alert severity="success">{success}</Alert>}
         <section className="rounded-lg border border-zinc-200 bg-white p-4">
             <h2 className="font-semibold text-zinc-800">Unit / Divisi</h2>
