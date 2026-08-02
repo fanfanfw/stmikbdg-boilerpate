@@ -1,5 +1,36 @@
 export const uploadPercent = event => event?.total > 0 ? Math.min(100, Math.round((event.loaded * 100) / event.total)) : null;
 export const validationErrors = formatted => formatted?.errors || {};
+export const clearNativeFileInput = ref => { if (ref?.current) ref.current.value = ''; };
+export const versionHistoryRequest = page => ({ page, per_page: 10 });
+export const versionHistoryState = versions => versions.map(version => ({ ...version, current_label: version.is_current ? 'Saat ini' : '' }));
+export const exactVersionDownload = (download, archiveId, version) => download(archiveId, { file_id: version.file_id, display_filename: version.display_filename });
+
+export const versionUploadPayload = (file, reason) => {
+    if (!file || !reason?.trim()) return null;
+    const data = new FormData();
+    data.append('file', file);
+    data.append('reason', reason.trim());
+    return data;
+};
+
+export async function runVersionUpload({ busy, file, reason, upload, refreshDetail, refreshHistory, fileInput, onBusy, onProgress, onSuccess, onError, formatError }) {
+    if (busy) return false;
+    const payload = versionUploadPayload(file, reason);
+    if (!payload) { onError('File dan alasan perubahan wajib diisi.'); return false; }
+    onBusy(true); onProgress(0); onError('');
+    try {
+        await upload(payload, event => { const percent = uploadPercent(event); if (percent !== null) onProgress(percent); });
+        clearNativeFileInput(fileInput);
+        await Promise.all([refreshDetail(), refreshHistory(1)]);
+        onSuccess();
+        return true;
+    } catch (error) {
+        onError(formatError ? await formatError(error) : error);
+        return false;
+    } finally {
+        onProgress(null); onBusy(false);
+    }
+}
 
 export const archivePaginationTransition = (model, currentPageSize) => {
     const pageSizeChanged = model.pageSize !== currentPageSize;
