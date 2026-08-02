@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, TextField } from '@mui/material';
+import { Alert, Button, Tab, Tabs, TextField } from '@mui/material';
 import SaveOutlined from '@mui/icons-material/SaveOutlined';
 import RefreshOutlined from '@mui/icons-material/RefreshOutlined';
 import { arsipApi } from '../../../libs/arsip_api';
 import { formatArsipError } from '../../../libs/arsip_http';
 import { customSwal } from '../../../components/CustomSwal';
 import PageHeader from '../../../components/PageHeader';
+import InstitutionalClassificationSettings from './InstitutionalClassificationSettings';
 
 const buttonSx = {
     borderRadius: '0.5rem',
@@ -32,6 +33,7 @@ export default function AdminSettings() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+    const [tab, setTab] = useState(0);
 
     const loadSettings = async () => {
         setLoading(true);
@@ -103,13 +105,20 @@ export default function AdminSettings() {
                 }
             />
 
-            {error && (
+            <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ mb: 2 }}>
+                <Tab label="Upload & Kuota" />
+                <Tab label="Unit & Folder Lembaga" />
+            </Tabs>
+
+            {tab === 1 && <InstitutionalClassificationSettings />}
+
+            {tab === 0 && error && (
                 <Alert severity="error" sx={{ mb: 2, borderRadius: '0.5rem' }}>
                     {error}
                 </Alert>
             )}
 
-            <section className="bg-white rounded-lg border border-zinc-200 p-4 space-y-5">
+            {tab === 0 && <section className="bg-white rounded-lg border border-zinc-200 p-4 space-y-5">
                 <div>
                     <p className="text-sm font-semibold text-zinc-800">Kuota Arsip Pribadi</p>
                     <p className="text-xs text-zinc-500 mt-1">
@@ -177,7 +186,7 @@ export default function AdminSettings() {
                         {saving ? 'Menyimpan...' : 'Simpan Pengaturan'}
                     </Button>
                 </div>
-            </section>
+            </section>}
         </div>
     );
 }
