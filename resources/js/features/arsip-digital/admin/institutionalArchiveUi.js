@@ -13,23 +13,63 @@ export const versionUploadPayload = (file, reason) => {
     return data;
 };
 
-export async function runVersionUpload({ busy, file, reason, upload, refreshDetail, refreshHistory, fileInput, onBusy, onProgress, onSuccess, onError, formatError }) {
-    if (busy) return false;
+export async function runVersionUpload({ busy, lock, lifecycle, file, reason, upload, refreshDetail, refreshHistory, fileInput, onBusy, onProgress, onSuccess, onPartialSuccess, onError, formatError }) {
+    const active = () => !lifecycle || lifecycle.valid();
+    if (busy || lock?.current || !active()) return false;
     const payload = versionUploadPayload(file, reason);
-    if (!payload) { onError('File dan alasan perubahan wajib diisi.'); return false; }
-    onBusy(true); onProgress(0); onError('');
+    if (!payload) { if (active()) onError('File dan alasan perubahan wajib diisi.'); return false; }
+    if (lock) lock.current = true;
+    if (active()) { onBusy(true); onProgress(0); onError(''); }
+    let uploaded = false;
     try {
-        await upload(payload, event => { const percent = uploadPercent(event); if (percent !== null) onProgress(percent); });
+        await upload(payload, event => { const percent = uploadPercent(event); if (active() && percent !== null) onProgress(percent); });
+        uploaded = true;
+        if (!active()) return false;
         clearNativeFileInput(fileInput);
         await Promise.all([refreshDetail(), refreshHistory(1)]);
-        onSuccess();
-        return true;
+        if (active()) onSuccess();
+        return active();
     } catch (error) {
-        onError(formatError ? await formatError(error) : error);
+        if (!active()) return false;
+        const formatted = formatError ? await formatError(error) : error;
+        if (!active()) return false;
+        if (uploaded && onPartialSuccess) onPartialSuccess(formatted);
+        else onError(formatted);
         return false;
     } finally {
-        onProgress(null); onBusy(false);
+        if (lock) lock.current = false;
+        if (active()) { onProgress(null); onBusy(false); }
     }
+}
+
+export const requestSequence = () => {
+    let current = 0; let mounted = true;
+    return { next: () => ++current, valid: sequence => mounted && sequence === current, invalidate: () => { mounted = false; current++; } };
+};
+
+export const routeLifecycle = (archiveId, isCurrent = () => true) => {
+    let active = true;
+    return Object.freeze({ archiveId, valid: () => active && isCurrent(archiveId), invalidate: () => { active = false; } });
+};
+
+export const routeActionAllowed = (lifecycle, currentArchiveId, displayedArchiveId) => lifecycle?.valid() && String(lifecycle.archiveId) === String(currentArchiveId) && String(displayedArchiveId) === String(currentArchiveId);
+
+export const institutionalArchiveRouteReset = () => ({ saving: false, downloading: false, versionProgress: null, versions: [], versionPage: 1, versionPages: 1, historyInitialLoading: true, historyPageLoading: false, historyError: '', archive: null, form: {}, success: '', error: '', refreshWarning: '', versionFile: null, reason: '' });
+
+export async function runExactVersionDownload({ lifecycle, currentArchiveId, displayedArchiveId, download, archiveId, version, onError, formatError }) {
+    if (!routeActionAllowed(lifecycle, currentArchiveId(), displayedArchiveId())) return false;
+    try { await exactVersionDownload(download, archiveId, version); return true; }
+    catch (error) { if (routeActionAllowed(lifecycle, currentArchiveId(), displayedArchiveId())) onError((await formatError(error)).message); return false; }
+}
+
+export const versionHistoryView = ({ initialLoading, pageLoading, error, rows }) => initialLoading ? 'loading' : error ? 'error' : rows.length ? (pageLoading ? 'page-loading' : 'rows') : 'empty';
+
+export async function retryVersionRefresh({ lock, lifecycle, refreshDetail, refreshHistory, onSuccess, onError }) {
+    if (lock?.current || (lifecycle && !lifecycle.valid())) return false;
+    if (lock) lock.current = true;
+    try { await Promise.all([refreshDetail(), refreshHistory(1)]); if (!lifecycle || lifecycle.valid()) onSuccess(); return !lifecycle || lifecycle.valid(); }
+    catch (error) { if (!lifecycle || lifecycle.valid()) onError(error); return false; }
+    finally { if (lock) lock.current = false; }
 }
 
 export const archivePaginationTransition = (model, currentPageSize) => {

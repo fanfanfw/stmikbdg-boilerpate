@@ -103,7 +103,7 @@ JS;
         }
 
         $detail = file_get_contents(base_path('resources/js/features/arsip-digital/admin/AdminInstitutionalArchiveDetail.jsx'));
-        $this->assertStringContainsString('runPreview(window.open.bind(window), () => arsipApi.previewInstitutionalArchive(id), URL, setError, formatArsipError)', $detail);
+        $this->assertStringContainsString('arsipApi.previewInstitutionalArchive(archiveId)', $detail);
     }
 
     public function test_versioning_helpers_execute_success_failure_pagination_and_exact_download_contracts(): void
@@ -111,7 +111,7 @@ JS;
         $helper = base_path('resources/js/features/arsip-digital/admin/institutionalArchiveUi.js');
         $script = <<<'JS'
 import assert from 'node:assert/strict';
-const { runVersionUpload, versionHistoryRequest, versionHistoryState, exactVersionDownload } = await import(process.argv[1]);
+const { exactVersionDownload, institutionalArchiveRouteReset, requestSequence, retryVersionRefresh, routeActionAllowed, routeLifecycle, runExactVersionDownload, runVersionUpload, versionHistoryRequest, versionHistoryState, versionHistoryView } = await import(process.argv[1]);
 const file = new Blob(['pdf'], { type: 'application/pdf' }); const input = { current: { value: 'revisi.pdf' } };
 let uploads = 0, busy = [], progress = [], detail = 0, history = [], success = 0, error = '';
 const options = { busy: false, file, reason: '  Koreksi isi  ', fileInput: input,
@@ -127,7 +127,21 @@ assert.equal(await runVersionUpload({ ...options, upload: async () => { throw ne
 assert.deepEqual(versionHistoryRequest(3), { page: 3, per_page: 10 });
 const rows = versionHistoryState([{ file_id: 9, version_number: 3, is_current: true }, { file_id: 4, version_number: 2, is_current: false }]); assert.equal(rows[0].current_label, 'Saat ini'); assert.equal(rows[1].current_label, ''); assert.deepEqual(rows.map(x => x.version_number), [3, 2]);
 let exact; await exactVersionDownload(async (archiveId, version) => { exact = [archiveId, version]; }, 7, { file_id: 4, display_filename: 'lama.pdf', storage_path: 'secret' }); assert.deepEqual(exact, [7, { file_id: 4, display_filename: 'lama.pdf' }]);
-console.log('version-behavior-ok');
+const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
+const gate = deferred(); const lock = { current: false }; uploads = 0; busy = []; progress = []; let oldCallbacks = 0, oldRefresh = 0;
+const uploadRouteA = routeLifecycle('A');
+const lockedOptions = { ...options, lifecycle: uploadRouteA, lock, upload: async () => { uploads++; await gate.promise; }, refreshDetail: async () => oldRefresh++, refreshHistory: async () => oldRefresh++, onBusy: () => oldCallbacks++, onProgress: () => oldCallbacks++, onSuccess: () => oldCallbacks++, onError: () => oldCallbacks++ };
+const first = runVersionUpload(lockedOptions); uploadRouteA.invalidate(); const uploadRouteB = routeLifecycle('B'); const second = runVersionUpload({ ...options, lifecycle: uploadRouteB, lock }); assert.equal(await second, false); assert.equal(uploads, 1); assert.equal(lock.current, true); const callbacksBeforeResolve = oldCallbacks; gate.resolve(); assert.equal(await first, false); assert.equal(oldCallbacks, callbacksBeforeResolve); assert.equal(oldRefresh, 0); assert.equal(lock.current, false); assert.equal(await runVersionUpload({ ...options, lifecycle: uploadRouteB, lock }), true); assert.equal(lock.current, false);
+const failedLock = { current: false }; assert.equal(await runVersionUpload({ ...options, lock: failedLock, upload: async () => { throw new Error('fail'); } }), false); assert.equal(failedLock.current, false);
+let currentRoute = 'A'; const renderRace = routeLifecycle('A', archiveId => archiveId === currentRoute); currentRoute = 'B'; let renderRaceUploads = 0; assert.equal(routeActionAllowed(renderRace, currentRoute, 'A'), false); assert.equal(await runVersionUpload({ ...options, lifecycle: renderRace, upload: async () => renderRaceUploads++ }), false); assert.equal(renderRaceUploads, 0);
+assert.deepEqual(institutionalArchiveRouteReset(), { saving: false, downloading: false, versionProgress: null, versions: [], versionPage: 1, versionPages: 1, historyInitialLoading: true, historyPageLoading: false, historyError: '', archive: null, form: {}, success: '', error: '', refreshWarning: '', versionFile: null, reason: '' });
+const routeA = routeLifecycle('A'); assert.equal(routeA.archiveId, 'A'); routeA.invalidate(); assert.equal(routeA.valid(), false); const routeB = routeLifecycle('B'); assert.equal(routeB.valid(), true);
+const oldRequests = requestSequence(); const oldFirst = oldRequests.next(); const oldLatest = oldRequests.next(); assert.equal(oldRequests.valid(oldFirst), false); assert.equal(oldRequests.valid(oldLatest), true); oldRequests.invalidate(); assert.equal(oldRequests.valid(oldLatest), false); const freshRequests = requestSequence(); assert.equal(freshRequests.valid(freshRequests.next()), true);
+let partial = '', fullSuccess = 0; const partialLock = { current: false }; assert.equal(await runVersionUpload({ ...options, lock: partialLock, refreshDetail: async () => { throw new Error('refresh'); }, onSuccess: () => fullSuccess++, onPartialSuccess: value => { partial = value.message; }, formatError: async () => ({ message: 'Sinkronisasi gagal.' }) }), false); assert.equal(partial, 'Sinkronisasi gagal.'); assert.equal(fullSuccess, 0); assert.equal(partialLock.current, false);
+let refreshDetail = 0, refreshHistory = 0, retrySuccess = 0, retryError = 0, retryUploads = 0; assert.equal(await retryVersionRefresh({ refreshDetail: async () => refreshDetail++, refreshHistory: async page => { assert.equal(page, 1); refreshHistory++; }, onSuccess: () => retrySuccess++, onError: () => retryError++ }), true); assert.deepEqual([refreshDetail, refreshHistory, retrySuccess, retryError, retryUploads], [1, 1, 1, 0, 0]); assert.equal(await retryVersionRefresh({ refreshDetail: async () => { throw new Error('retry'); }, refreshHistory: async () => refreshHistory++, onSuccess: () => retrySuccess++, onError: () => retryError++ }), false); assert.equal(retryError, 1); assert.equal(retryUploads, 0); const retryGate = deferred(); const retryLock = { current: false }; let overlapSuccess = 0, overlapError = 0; const overlapLifecycle = routeLifecycle('R'); const overlapFirst = retryVersionRefresh({ lock: retryLock, lifecycle: overlapLifecycle, refreshDetail: () => retryGate.promise, refreshHistory: async () => {}, onSuccess: () => overlapSuccess++, onError: () => overlapError++ }); assert.equal(retryLock.current, true); assert.equal(await retryVersionRefresh({ lock: retryLock, lifecycle: overlapLifecycle, refreshDetail: async () => {}, refreshHistory: async () => {}, onSuccess: () => overlapSuccess++, onError: () => overlapError++ }), false); retryGate.resolve(); assert.equal(await overlapFirst, true); assert.deepEqual([overlapSuccess, overlapError, retryLock.current], [1, 0, false]); const retryFailureLock = { current: false }; assert.equal(await retryVersionRefresh({ lock: retryFailureLock, lifecycle: overlapLifecycle, refreshDetail: async () => { throw new Error('x'); }, refreshHistory: async () => {}, onSuccess: () => overlapSuccess++, onError: () => overlapError++ }), false); assert.equal(retryFailureLock.current, false); assert.equal(overlapError, 1);
+let exactErrors = 0, exactReject; const exactGate = new Promise((_, reject) => { exactReject = reject; }); currentRoute = 'A'; const exactLifecycle = routeLifecycle('A', archiveId => archiveId === currentRoute); const exactPending = runExactVersionDownload({ lifecycle: exactLifecycle, currentArchiveId: () => currentRoute, displayedArchiveId: () => 'A', download: () => exactGate, archiveId: 'A', version: { file_id: 1, display_filename: 'x.pdf' }, onError: () => exactErrors++, formatError: async () => ({ message: 'x' }) }); currentRoute = 'B'; exactReject(new Error('x')); assert.equal(await exactPending, false); assert.equal(exactErrors, 0);
+for (const [input, view] of [[{ initialLoading: true, pageLoading: false, error: '', rows: [] }, 'loading'], [{ initialLoading: false, pageLoading: true, error: '', rows: [{}] }, 'page-loading'], [{ initialLoading: false, pageLoading: false, error: 'x', rows: [] }, 'error'], [{ initialLoading: false, pageLoading: false, error: '', rows: [] }, 'empty'], [{ initialLoading: false, pageLoading: false, error: '', rows: [{}] }, 'rows']]) assert.equal(versionHistoryView(input), view);
+console.log('version-behavior-ok lock=exclusive release=success+failure lifecycle=guarded sequence=latest+invalidate+fresh partial=warning retry=refresh-only history=all-states');
 JS;
         $command = ['node', '--input-type=module', '--eval', $script, 'file://'.$helper];
         $pipes = [];
@@ -151,19 +165,19 @@ JS;
         $detail = file_get_contents(base_path('resources/js/features/arsip-digital/admin/AdminInstitutionalArchiveDetail.jsx'));
         $api = file_get_contents(base_path('resources/js/libs/arsip_api.js'));
 
-        $this->assertStringContainsString('import { exactVersionDownload, runDownload, runPreview, runVersionUpload, validationErrors, versionHistoryRequest, versionHistoryState }', $detail);
-        $this->assertStringContainsString('arsipApi.institutionalArchiveVersions(id, versionHistoryRequest(page))', $detail);
+        $this->assertStringContainsString('requestSequence, retryVersionRefresh, routeActionAllowed, routeLifecycle, runDownload, runExactVersionDownload, runPreview, runVersionUpload', $detail);
+        $this->assertStringContainsString('arsipApi.institutionalArchiveVersions(archiveId, versionHistoryRequest(page))', $detail);
         $this->assertStringContainsString('setVersions(versionHistoryState(response.data.versions))', $detail);
-        $this->assertStringContainsString('runVersionUpload({ busy: saving, file: versionFile, reason, fileInput: versionInput', $detail);
-        $this->assertStringContainsString('upload: (data, progress) => arsipApi.uploadInstitutionalArchiveVersion(id, data, progress)', $detail);
-        $this->assertStringContainsString('refreshHistory: page => { setVersionPage(page); return loadVersions(page); }', $detail);
-        $this->assertStringContainsString('exactVersionDownload(arsipApi.downloadInstitutionalArchiveVersion, id, version)', $detail);
+        $this->assertStringContainsString('runVersionUpload({ busy: saving, lock: uploadLock, lifecycle, file: versionFile', $detail);
+        $this->assertStringContainsString('arsipApi.uploadInstitutionalArchiveVersion(archiveId, data, progress)', $detail);
+        $this->assertStringContainsString('refreshHistory: page => loadVersions(lifecycle, historyRequests.current, archiveId, page)', $detail);
+        $this->assertStringContainsString('runExactVersionDownload({ lifecycle, currentArchiveId: () => currentRouteId.current', $detail);
 
         $this->assertStringContainsString('type="file" inputRef={versionInput}', $detail);
         $this->assertStringContainsString('required label="Alasan perubahan" value={reason}', $detail);
         $this->assertStringContainsString('<LinearProgress variant="determinate" value={versionProgress}', $detail);
         $this->assertStringContainsString('<Pagination page={versionPage} count={versionPages}', $detail);
-        $this->assertStringContainsString('onChange={(_, page) => { setVersionPage(page); loadVersions(page); }}', $detail);
+        $this->assertStringContainsString('loadVersions(lifecycle, historyRequests.current, id, page).catch(() => {})', $detail);
         $this->assertStringContainsString('version.current_label ? ` (${version.current_label})`', $detail);
         foreach (['Uploader ID: {version.uploaded_by_user_id}', '{date(version.created_at)}', '{version.file_size_bytes} byte', 'Checksum: {version.checksum_sha256}', "Alasan: {version.version_reason || '-'}"] as $versionMetadata) {
             $this->assertStringContainsString($versionMetadata, $detail);
