@@ -102,10 +102,10 @@ function CustomDataTable({
     ...props
 }) {
     const toolbarSlots = useMemo(() => ({
-        toolbar: CustomToolbar,
+        ...(toolbar !== false && { toolbar: CustomToolbar }),
         noRowsOverlay: CustomNoRowsOverlay,
         noResultsOverlay: CustomNoRowsOverlay,
-    }), []);
+    }), [toolbar]);
     const toolbarSlotProps = useMemo(() => ({
         toolbar,
         loadingOverlay: {

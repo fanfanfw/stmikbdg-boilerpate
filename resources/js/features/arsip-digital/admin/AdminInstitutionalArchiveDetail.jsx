@@ -5,7 +5,7 @@ import PageHeader from '../../../components/PageHeader';
 import { arsipApi } from '../../../libs/arsip_api';
 import { formatArsipError } from '../../../libs/arsip_http';
 import { fetchAllPages } from './InstitutionalClassificationSettings';
-import { runDownload, validationErrors } from './institutionalArchiveUi';
+import { runDownload, runPreview, validationErrors } from './institutionalArchiveUi';
 
 const metadataFields = ['title', 'document_number', 'document_year', 'document_date', 'received_date', 'unit_id', 'description', 'access_level', 'retention_note', 'tags'];
 const metadataPayload = form => Object.fromEntries(metadataFields.map(key => [key, key === 'tags' ? String(form[key] || '').split(',').map(x => x.trim()).filter(Boolean) : form[key] === '' ? null : form[key]]));
@@ -17,7 +17,7 @@ export default function AdminInstitutionalArchiveDetail() {
     const load = async () => { setLoading(true); setError(''); try { const response = await arsipApi.institutionalArchive(id); const item = response.data.archive; setArchive(item); setForm({ ...item, document_date: item.document_date?.slice(0, 10) || '', received_date: item.received_date?.slice(0, 10) || '', tags: (item.tags || []).join(', ') }); setMoveCategory(item.category_id || ''); } catch (e) { setError((await formatArsipError(e)).message); } finally { setLoading(false); } };
     useEffect(() => { load(); Promise.all([fetchAllPages(arsipApi.institutionalUnits, 'units', false), fetchAllPages(arsipApi.institutionalCategories, 'categories', false)]).then(([u, c]) => { setUnits(u.filter(x => !x.deleted_at)); setCategories(c.filter(x => !x.deleted_at)); }).catch(async e => setError((await formatArsipError(e)).message)); }, [id]);
     const run = async (action, message, setFieldErrors) => { if (saving) return; setSaving(true); setError(''); setFieldErrors({}); try { await action(); setSuccess(message); await load(); } catch (e) { const formatted = await formatArsipError(e); setError(formatted.message); setFieldErrors(validationErrors(formatted)); } finally { setSaving(false); } };
-    const preview = async () => { try { const blob = await arsipApi.previewInstitutionalArchive(id); const url = URL.createObjectURL(blob); const win = window.open(url, '_blank', 'noopener'); setTimeout(() => URL.revokeObjectURL(url), win ? 60000 : 0); } catch (e) { setError((await formatArsipError(e)).message); } };
+    const preview = () => { setError(''); runPreview(window.open.bind(window), () => arsipApi.previewInstitutionalArchive(id), URL, setError, formatArsipError); };
     const download = async () => { if (downloading) return; setDownloading(true); setError(''); await runDownload(() => arsipApi.downloadInstitutionalArchive(archive), setError, formatArsipError); setDownloading(false); };
     if (loading) return <div className="p-4">Memuat detail arsip...</div>;
     if (!archive) return <div className="p-4"><Alert severity="error">{error || 'Arsip tidak ditemukan.'}</Alert><Button component={Link} to="/home/arsip-lembaga">Kembali</Button></div>;
