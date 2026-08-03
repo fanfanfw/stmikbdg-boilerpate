@@ -71,13 +71,43 @@ export const safeTimelineItem = item => ({
     reason: typeof item?.reason === 'string' ? item.reason : null,
     changed_fields: Array.isArray(item?.changed_fields) ? item.changed_fields.filter(value => typeof value === 'string') : [],
 });
-export async function runLifecycleAction({ lock, action, refresh, navigate, onError, formatError }) {
-    if (lock.current) return false;
+export async function runLifecycleAction({ lock, lifecycle, action, refresh, navigate, onError, formatError }) {
+    if (lock.current || (lifecycle && !lifecycle.valid())) return false;
+    const owner = Symbol('lifecycle-action');
     lock.current = true;
-    try { await action(); if (refresh) await refresh(); if (navigate) navigate(); return true; }
-    catch (error) { onError((await formatError(error)).message); return false; }
-    finally { lock.current = false; }
+    lock.owner = owner;
+    const active = () => lock.current && lock.owner === owner && (!lifecycle || lifecycle.valid());
+    try {
+        await action();
+        if (!active()) return false;
+        if (refresh) await refresh();
+        if (!active()) return false;
+        if (navigate) navigate();
+        return true;
+    } catch (error) {
+        if (!active()) return false;
+        const formatted = await formatError(error);
+        if (active()) onError(formatted.message);
+        return false;
+    } finally {
+        if (lock.owner === owner) { lock.current = false; delete lock.owner; }
+    }
 }
+
+export async function runArchiveDelete({ lock, lifecycle, reason, archiveId, currentArchiveId, displayedArchiveId, action, navigate, onError, formatError }) {
+    const trimmedReason = reason?.trim();
+    if (!trimmedReason || !routeActionAllowed(lifecycle, currentArchiveId, displayedArchiveId)) return false;
+    return runLifecycleAction({ lock, lifecycle, action: () => action(archiveId, trimmedReason), navigate, onError, formatError });
+}
+
+export const restoreDialogController = lifecycle => {
+    let generation = 0; let selectedId = null;
+    return {
+        select(id) { selectedId = String(id); generation++; return generation; },
+        close() { selectedId = null; generation++; },
+        capture(id) { const capturedGeneration = generation; const capturedId = String(id); return { valid: () => lifecycle.valid() && generation === capturedGeneration && selectedId === capturedId }; },
+    };
+};
 
 export const requestSequence = () => {
     let current = 0; let mounted = true;
