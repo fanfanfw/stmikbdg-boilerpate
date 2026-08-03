@@ -42,6 +42,43 @@ export async function runVersionUpload({ busy, lock, lifecycle, file, reason, up
     }
 }
 
+export const compactQuery = query => Object.fromEntries(Object.entries(query).filter(([, value]) => value !== '' && value !== null && value !== undefined));
+export const trashRequest = (page, perPage, filters = {}) => compactQuery({
+    page,
+    per_page: perPage,
+    search: filters.search,
+    unit_id: filters.unit_id,
+    document_year: filters.document_year,
+    sort: filters.sort && filters.sort !== 'deleted_at' ? filters.sort : undefined,
+    direction: filters.direction && filters.direction !== 'desc' ? filters.direction : undefined,
+});
+export const timelineView = ({ initialLoading, pageLoading, error, rows }) => initialLoading ? 'loading' : error ? 'error' : rows.length ? (pageLoading ? 'page-loading' : 'rows') : 'empty';
+export const timelineRequest = (page, perPage = 10) => ({ page, per_page: perPage });
+export const timelineRequestController = () => {
+    let selectedArchiveId = null;
+    let sequence = requestSequence();
+    return {
+        select(archiveId) { sequence.invalidate(); selectedArchiveId = String(archiveId); sequence = requestSequence(); return sequence; },
+        capture(archiveId) { const captured = sequence; const token = captured.next(); const selected = String(archiveId); return { valid: () => selectedArchiveId === selected && captured.valid(token) }; },
+        close() { sequence.invalidate(); selectedArchiveId = null; },
+    };
+};
+export const safeTimelineItem = item => ({
+    audit_log_id: item?.audit_log_id,
+    label: typeof item?.label === 'string' ? item.label : 'Aktivitas arsip',
+    actor_user_id: Number.isInteger(item?.actor_user_id) ? item.actor_user_id : null,
+    occurred_at: typeof item?.occurred_at === 'string' ? item.occurred_at : null,
+    reason: typeof item?.reason === 'string' ? item.reason : null,
+    changed_fields: Array.isArray(item?.changed_fields) ? item.changed_fields.filter(value => typeof value === 'string') : [],
+});
+export async function runLifecycleAction({ lock, action, refresh, navigate, onError, formatError }) {
+    if (lock.current) return false;
+    lock.current = true;
+    try { await action(); if (refresh) await refresh(); if (navigate) navigate(); return true; }
+    catch (error) { onError((await formatError(error)).message); return false; }
+    finally { lock.current = false; }
+}
+
 export const requestSequence = () => {
     let current = 0; let mounted = true;
     return { next: () => ++current, valid: sequence => mounted && sequence === current, invalidate: () => { mounted = false; current++; } };

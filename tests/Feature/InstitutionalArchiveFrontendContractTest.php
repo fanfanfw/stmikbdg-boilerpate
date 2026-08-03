@@ -160,6 +160,51 @@ JS;
         $this->assertStringNotContainsString('deleteInstitutionalArchiveVersion', $detail);
     }
 
+    public function test_phase_five_helpers_and_wiring_are_executable_and_safe(): void
+    {
+        $helper = base_path('resources/js/features/arsip-digital/admin/institutionalArchiveUi.js');
+        $script = <<<'JS'
+import assert from 'node:assert/strict';
+const { compactQuery, requestSequence, runLifecycleAction, safeTimelineItem, timelineRequest, timelineRequestController, timelineView, trashRequest } = await import(process.argv[1]);
+assert.deepEqual(timelineRequest(2, 25), { page: 2, per_page: 25 });
+assert.deepEqual(compactQuery({ empty: '', absent: undefined, nil: null, zero: 0, text: 'x' }), { zero: 0, text: 'x' });
+assert.deepEqual(trashRequest(1, 25, { search: '', unit_id: '', document_year: '', sort: 'deleted_at', direction: 'desc' }), { page: 1, per_page: 25 });
+assert.deepEqual(trashRequest(3, 50, { search: 'surat', unit_id: 0, document_year: 2026, sort: 'title', direction: 'asc' }), { page: 3, per_page: 50, search: 'surat', unit_id: 0, document_year: 2026, sort: 'title', direction: 'asc' });
+assert.deepEqual(trashRequest(1, 10, { search: '', unit_id: '', document_year: '', sort: 'deleted_at', direction: 'desc' }), { page: 1, per_page: 10 });
+for (const [input, expected] of [[{initialLoading:true,pageLoading:false,error:'',rows:[]},'loading'],[{initialLoading:false,pageLoading:true,error:'',rows:[{}]},'page-loading'],[{initialLoading:false,pageLoading:false,error:'x',rows:[]},'error'],[{initialLoading:false,pageLoading:false,error:'',rows:[]},'empty'],[{initialLoading:false,pageLoading:false,error:'',rows:[{}]},'rows']]) assert.equal(timelineView(input), expected);
+assert.deepEqual(safeTimelineItem({ audit_log_id: 1, label: ['bad'], actor_user_id: '1', occurred_at: 7, reason: { secret: true }, changed_fields: ['title', 9] }), { audit_log_id: 1, label: 'Aktivitas arsip', actor_user_id: null, occurred_at: null, reason: null, changed_fields: ['title'] });
+let calls=0, refreshed=0, navigated=0, error=''; const lock={current:false}; const gate={}; gate.promise=new Promise(resolve=>gate.resolve=resolve);
+const first=runLifecycleAction({lock,action:async()=>{calls++;await gate.promise;},refresh:async()=>refreshed++,navigate:()=>navigated++,onError:value=>error=value,formatError:async()=>({message:'safe'})});
+assert.equal(lock.current,true); assert.equal(await runLifecycleAction({lock,action:async()=>calls++,onError:()=>{},formatError:async()=>({message:'x'})}),false); gate.resolve(); assert.equal(await first,true); assert.deepEqual([calls,refreshed,navigated,lock.current,error],[1,1,1,false,'']);
+assert.equal(await runLifecycleAction({lock,action:async()=>{throw new Error('secret');},onError:value=>error=value,formatError:async()=>({message:'Konflik nomor.'})}),false); assert.equal(error,'Konflik nomor.'); assert.equal(lock.current,false);
+const sequence=requestSequence(); const old=sequence.next(); const latest=sequence.next(); assert.equal(sequence.valid(old),false); assert.equal(sequence.valid(latest),true); sequence.invalidate(); assert.equal(sequence.valid(latest),false);
+const controller=timelineRequestController(); controller.select('A'); const delayedA=controller.capture('A'); controller.select('B'); const delayedB=controller.capture('B'); assert.equal(delayedB.valid(),true); assert.equal(delayedA.valid(),false); let displayed=''; if(delayedB.valid()) displayed='B rows'; assert.equal(displayed,'B rows'); if(delayedA.valid()) displayed='A rows'; assert.equal(displayed,'B rows'); let timelineError=''; if(delayedA.valid()) timelineError='A failed'; assert.equal(timelineError,''); const page1=controller.capture('B'); const page2=controller.capture('B'); assert.equal(page1.valid(),false); assert.equal(page2.valid(),true); controller.close(); assert.equal(page2.valid(),false);
+console.log('phase5-behavior-ok');
+JS;
+        $command = ['node', '--input-type=module', '--eval', $script, 'file://'.$helper];
+        $pipes = [];
+        $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, base_path());
+        $stdout = stream_get_contents($pipes[1]);
+        $stderr = stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $this->assertSame(0, proc_close($process), $stderr);
+        $this->assertStringContainsString('phase5-behavior-ok', $stdout);
+        $routes = file_get_contents(base_path('resources/js/features/arsip-digital/routes.jsx'));
+        $this->assertLessThan(strpos($routes, '/home/arsip-lembaga/:id'), strpos($routes, '/home/arsip-lembaga/sampah'));
+        $api = file_get_contents(base_path('resources/js/libs/arsip_api.js'));
+        $this->assertStringContainsString('institutionalArchiveTrash', $api);
+        $this->assertStringNotContainsString('hardDeleteInstitutionalArchive', $api);
+        $trash = file_get_contents(base_path('resources/js/features/arsip-digital/admin/AdminInstitutionalArchiveTrash.jsx'));
+        foreach (['unit_id', 'document_year', 'sort', 'direction', 'pageSize', 'runLifecycleAction', 'timelineRequests.current.close()', 'trashRequest(nextPage, nextSize, nextFilters)'] as $value) {
+            $this->assertStringContainsString($value, $trash);
+        } $this->assertStringNotContainsString('Hapus permanen', $trash);
+        $detail = file_get_contents(base_path('resources/js/features/arsip-digital/admin/AdminInstitutionalArchiveDetail.jsx'));
+        foreach (['timelineView', 'timelineRequests', 'safeTimelineItem', 'Pagination page={timelinePage}'] as $value) {
+            $this->assertStringContainsString($value, $detail);
+        }
+    }
+
     public function test_versioning_detail_wires_production_helpers_api_routes_and_visible_contract(): void
     {
         $detail = file_get_contents(base_path('resources/js/features/arsip-digital/admin/AdminInstitutionalArchiveDetail.jsx'));
