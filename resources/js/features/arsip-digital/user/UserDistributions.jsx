@@ -168,6 +168,7 @@ export default function UserDistributions() {
                                     >
                                         {dist.title}
                                     </Typography>
+                                    <Chip label={dist.availability_status || 'available'} size="small" color={dist.availability_status === 'available' ? 'success' : 'default'} />
                                     {dist.published_at && (
                                         <Chip
                                             icon={<CalendarTodayOutlined sx={{ fontSize: 14 }} />}
@@ -185,6 +186,7 @@ export default function UserDistributions() {
                                     )}
                                 </Box>
 
+                                {dist.institutional_archive && <Typography variant="body2" sx={{ color: '#52525b', mb: 1 }}>Arsip: {dist.institutional_archive.title} · Unit: {dist.institutional_archive.unit?.name || '-'} · Nomor: {dist.institutional_archive.document_number || '-'} · Kedaluwarsa: {dist.expires_at ? dateTime(dist.expires_at) : 'Tanpa batas'}</Typography>}
                                 {dist.description && (
                                     <Typography
                                         variant="body2"
@@ -225,7 +227,7 @@ export default function UserDistributions() {
                                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                                             {dist.files.map((file) => (
                                                 <Box
-                                                    key={file.file_id}
+                                                    key={file.recipient_id}
                                                     sx={{
                                                         display: 'flex',
                                                         alignItems: 'center',

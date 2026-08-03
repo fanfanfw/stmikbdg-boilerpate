@@ -4,6 +4,43 @@ export const clearNativeFileInput = ref => { if (ref?.current) ref.current.value
 export const versionHistoryRequest = page => ({ page, per_page: 10 });
 export const versionHistoryState = versions => versions.map(version => ({ ...version, current_label: version.is_current ? 'Saat ini' : '' }));
 export const exactVersionDownload = (download, archiveId, version) => download(archiveId, { file_id: version.file_id, display_filename: version.display_filename });
+export const distributionExpiry = value => value ? new Date(value).toISOString() : null;
+export const distributionPayload = (form, targets) => ({ ...targets, title: form.title.trim(), description: form.description || null, expires_at: distributionExpiry(form.expires_at) });
+const canonicalTargetValue = value => {
+    if (Array.isArray(value)) return value.map(canonicalTargetValue).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+    if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().filter(key => value[key] !== undefined).map(key => [key, canonicalTargetValue(value[key])]));
+    return typeof value === 'string' ? value.trim() : value;
+};
+export const distributionTargetFingerprint = targets => JSON.stringify(canonicalTargetValue({
+    target_role: targets?.target_role || null,
+    scope_type: targets?.scope_type || null,
+    target_identifiers: targets?.target_identifiers || [],
+    target_filters: targets?.target_filters || {},
+    target_segment_ids: targets?.target_segment_ids || [],
+    target_criteria: targets?.target_criteria || {},
+}));
+export const distributionPreviewConfirmed = (preview, targets, previewFingerprint = preview?.target_fingerprint) => Boolean(preview && preview.total_valid > 0 && preview.total_invalid === 0 && previewFingerprint === distributionTargetFingerprint(targets));
+export const recipientPageRequest = page => ({ page, per_page: 25 });
+export const recipientStatus = recipient => recipient.download_count > 0 ? 'downloaded' : recipient.delivery_status;
+
+export const distributionPanelController = (isCurrent = () => true) => {
+    let archiveId = null; let generation = 0; let mounted = true; let owner = null; const requests = new Map();
+    const valid = capture => mounted && capture.generation === generation && capture.archiveId === archiveId && isCurrent(capture.archiveId) && requests.get(capture.kind) === capture.token;
+    return {
+        select(id) { archiveId = String(id); generation++; owner = null; requests.clear(); return generation; },
+        capture(kind) { const capture = { archiveId, generation, kind, token: Symbol(kind) }; requests.set(kind, capture.token); return Object.freeze({ ...capture, valid: () => valid(capture) }); },
+        beginAction() { if (owner || !mounted || !isCurrent(archiveId)) return null; owner = Symbol('distribution-action'); const capture = this.capture('action'); const actionOwner = owner; return Object.freeze({ ...capture, owner: actionOwner, valid: () => owner === actionOwner && valid(capture) }); },
+        release(capture) { if (capture?.owner !== owner) return false; const wasValid = capture.valid(); owner = null; return wasValid; },
+        current(id) { return mounted && archiveId === String(id) && isCurrent(archiveId); },
+        close() { mounted = false; generation++; owner = null; requests.clear(); },
+        busy() { return owner !== null; },
+    };
+};
+
+export const fetchDistributionPanelData = async (capture, request) => {
+    const data = await request();
+    return capture.valid() ? data : null;
+};
 
 export const versionUploadPayload = (file, reason) => {
     if (!file || !reason?.trim()) return null;

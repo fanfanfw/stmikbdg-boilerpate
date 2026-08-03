@@ -38,6 +38,13 @@ export const arsipApi = {
     deleteInstitutionalArchive: (id, reason) => deleteJson(`/admin/institutional-archives/${id}`, { reason }),
     restoreInstitutionalArchive: (id) => postJson(`/admin/institutional-archives/${id}/restore`),
     institutionalArchiveTimeline: (id, params) => getJson(`/admin/institutional-archives/${id}/timeline`, params),
+    previewInstitutionalDistributionTargets: (id, payload) => postJson(`/admin/institutional-archives/${id}/distributions/preview-targets`, payload),
+    createInstitutionalDistribution: (id, payload) => postJson(`/admin/institutional-archives/${id}/distributions`, payload),
+    institutionalDistributions: (id, params) => getJson(`/admin/institutional-archives/${id}/distributions`, params),
+    institutionalDistribution: id => getJson(`/admin/institutional-distributions/${id}`),
+    publishInstitutionalDistribution: id => postJson(`/admin/institutional-distributions/${id}/publish`),
+    withdrawInstitutionalDistribution: (id, reason) => postJson(`/admin/institutional-distributions/${id}/withdraw`, { reason }),
+    institutionalDistributionRecipients: (id, params) => getJson(`/admin/institutional-distributions/${id}/recipients`, params),
     uploadInstitutionalArchive: (formData, onUploadProgress) => uploadFormData('/admin/institutional-archives', formData, { onUploadProgress }),
     updateInstitutionalArchive: (id, payload) => putJson(`/admin/institutional-archives/${id}`, payload),
     moveInstitutionalArchive: (id, categoryId) => postJson(`/admin/institutional-archives/${id}/move`, { category_id: categoryId || null }),
@@ -170,14 +177,14 @@ export const arsipApi = {
     // User Distributions
     userDistributions: () => getJson('/distributions'),
     downloadDistributionFile: (file) => {
-        const fileId = file?.file_id ?? file?.id ?? file?.distribution_file_id;
-        if (fileId == null) {
+        const recipientId = file?.recipient_id;
+        if (recipientId == null) {
             missingFileId();
         }
 
         return downloadBlob(
-            `/distribution-files/${fileId}/download`,
-            file?.display_filename || file?.original_filename || file?.filename || `distribution-file-${fileId}`,
+            `/distribution-recipients/${recipientId}/download`,
+            file?.display_filename || file?.original_filename || file?.filename || `distribution-file-${recipientId}`,
         );
     },
 

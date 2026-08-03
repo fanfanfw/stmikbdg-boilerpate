@@ -216,6 +216,49 @@ JS;
         }
     }
 
+    public function test_phase_six_distribution_helpers_and_wiring_execute(): void
+    {
+        $helper = base_path('resources/js/features/arsip-digital/admin/institutionalArchiveUi.js');
+        $script = <<<'JS'
+import assert from 'node:assert/strict';
+const { distributionExpiry, distributionPanelController, distributionPayload, distributionPreviewConfirmed, distributionTargetFingerprint, fetchDistributionPanelData, recipientPageRequest, recipientStatus, requestSequence, routeLifecycle } = await import(process.argv[1]);
+const targets={target_role:'mahasiswa',scope_type:'specific',target_identifiers:['22010001']};
+assert.equal(distributionExpiry('2026-08-03T12:00:00+02:00'),'2026-08-03T10:00:00.000Z'); assert.equal(distributionExpiry(''),null);
+assert.deepEqual(distributionPayload({title:' Kirim ',description:'',expires_at:''},targets),{...targets,title:'Kirim',description:null,expires_at:null});
+const targetFingerprint=distributionTargetFingerprint(targets);
+assert.equal(distributionPreviewConfirmed({total_valid:101,total_invalid:0},targets,targetFingerprint),true);
+assert.equal(distributionPreviewConfirmed({total_valid:1,total_invalid:1},targets,targetFingerprint),false);
+assert.equal(distributionPreviewConfirmed({total_valid:1,total_invalid:0},targets,'changed'),false);
+assert.equal(distributionTargetFingerprint({...targets,target_identifiers:['2','1']}),distributionTargetFingerprint({...targets,target_identifiers:['1','2']}));
+assert.notEqual(distributionTargetFingerprint({...targets,target_filters:{status:['aktif']}}),distributionTargetFingerprint({...targets,target_filters:{status:['lulus']}}));
+assert.notEqual(distributionTargetFingerprint({...targets,target_segment_ids:[1]}),distributionTargetFingerprint({...targets,target_segment_ids:[2]}));
+assert.deepEqual(recipientPageRequest(3),{page:3,per_page:25}); assert.equal(recipientStatus({delivery_status:'available',download_count:0}),'available'); assert.equal(recipientStatus({delivery_status:'available',download_count:2}),'downloaded');
+const lifecycle=routeLifecycle('A'); const sequence=requestSequence(); const stale=sequence.next(); const current=sequence.next(); assert.equal(sequence.valid(stale),false); assert.equal(sequence.valid(current),true); lifecycle.invalidate(); assert.equal(lifecycle.valid(),false);
+const deferred=()=>{let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return{promise,resolve,reject}}; let currentArchive='A'; const controller=distributionPanelController(id=>id===currentArchive); controller.select('A');
+const kinds=['list','preview','recipients']; const staleWrites=[]; for(const kind of kinds){const gate=deferred();const capture=controller.capture(kind);const pending=fetchDistributionPanelData(capture,()=>gate.promise);currentArchive='B';controller.select('B');gate.resolve(`${kind}-A`);staleWrites.push(await pending);currentArchive='A';controller.select('A');} assert.deepEqual(staleWrites,[null,null,null]);
+currentArchive='A';controller.select('A');const actionGate=deferred();const actionA=controller.beginAction();assert.ok(actionA);assert.equal(controller.beginAction(),null);assert.equal(controller.busy(),true);currentArchive='B';controller.select('B');actionGate.resolve();await actionGate.promise;assert.equal(actionA.valid(),false);assert.equal(controller.release(actionA),false);assert.equal(controller.busy(),false);
+const rejected=deferred();currentArchive='A';controller.select('A');const errorCapture=controller.capture('preview');const errorPending=fetchDistributionPanelData(errorCapture,()=>rejected.promise).catch(()=>errorCapture.valid()?'mutated':null);currentArchive='B';controller.select('B');rejected.reject(new Error('A'));assert.equal(await errorPending,null);
+const fresh=controller.capture('list');assert.equal((await fetchDistributionPanelData(fresh,async()=>['B']))[0],'B');const previewGate=deferred();const previewCapture=controller.capture('preview');const previewFingerprint=distributionTargetFingerprint(targets);const pendingPreview=fetchDistributionPanelData(previewCapture,()=>previewGate.promise);const changedTargets={...targets,target_filters:{status:['aktif']}};controller.capture('preview');previewGate.resolve({total_valid:1,total_invalid:0});assert.equal(await pendingPreview,null);assert.equal(distributionPreviewConfirmed(null,changedTargets,previewFingerprint),false);let creates=0;const createNow=()=>{if(!distributionPreviewConfirmed({total_valid:1,total_invalid:0},changedTargets,previewFingerprint))return false;creates++;return true};assert.equal(createNow(),false);assert.equal(creates,0);const freshAction=controller.beginAction();assert.ok(freshAction);assert.equal(controller.release(freshAction),true);assert.equal(controller.busy(),false);controller.close();assert.equal(fresh.valid(),false);assert.equal(controller.beginAction(),null);
+console.log('phase6-behavior-ok stale=list+preview+recipients+action+error fresh=B duplicate=blocked unmount=safe');
+JS;
+        $process = proc_open(['node', '--input-type=module', '--eval', $script, 'file://'.$helper], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, base_path());
+        $stdout = stream_get_contents($pipes[1]);
+        $stderr = stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $this->assertSame(0, proc_close($process), $stderr);
+        $this->assertStringContainsString('phase6-behavior-ok', $stdout);
+        $api = file_get_contents(base_path('resources/js/libs/arsip_api.js'));
+        foreach (['previewInstitutionalDistributionTargets', 'createInstitutionalDistribution', 'publishInstitutionalDistribution', 'withdrawInstitutionalDistribution', 'institutionalDistributionRecipients'] as $method) {
+            $this->assertStringContainsString($method, $api);
+        }
+        $panel = file_get_contents(base_path('resources/js/features/arsip-digital/admin/InstitutionalDistributionPanel.jsx'));
+        foreach (['TargetPicker', 'window.confirm', 'source_file_id', 'first_downloaded_at', 'last_downloaded_at', 'download_count', 'current_page', 'last_page', 'distributionPanelController', 'fetchDistributionPanelData', 'currentArchiveId'] as $contract) {
+            $this->assertStringContainsString($contract, $panel);
+        }
+        $this->assertStringContainsString('const capture = controller.current.beginAction()', $panel);
+    }
+
     public function test_versioning_detail_wires_production_helpers_api_routes_and_visible_contract(): void
     {
         $detail = file_get_contents(base_path('resources/js/features/arsip-digital/admin/AdminInstitutionalArchiveDetail.jsx'));
