@@ -76,8 +76,10 @@ function targetQueryKey(filters) {
 function controlledValueFingerprint(value, initialRole) {
     return JSON.stringify({
         target_role: ['mahasiswa', 'dosen'].includes(value?.target_role) ? value.target_role : initialRole,
-        scope_type: value?.scope_type === 'specific' ? 'specific' : 'filter',
+        scope_type: ['specific', 'filter', 'segment'].includes(value?.scope_type) ? value.scope_type : 'filter',
+        target_filters: value?.target_filters || {},
         target_identifiers: Array.isArray(value?.target_identifiers) ? value.target_identifiers.map(String) : [],
+        target_segment_ids: Array.isArray(value?.target_segment_ids) ? value.target_segment_ids.map(Number) : [],
     });
 }
 
@@ -96,7 +98,7 @@ const TargetRow = memo(function TargetRow({ target, role, selected, invalid, inv
     );
 });
 
-function buildPayload(role, mode, filters, selectedIdentifiers) {
+function buildPayload(role, mode, filters, selectedIdentifiers, segmentIds = []) {
     const targetFilters = {};
 
     if (mode === 'filter') {
@@ -110,9 +112,10 @@ function buildPayload(role, mode, filters, selectedIdentifiers) {
 
     return {
         target_role: role,
-        scope_type: mode === 'specific' ? 'specific' : 'filter',
+        scope_type: mode === 'segment' ? 'segment' : mode === 'specific' ? 'specific' : 'filter',
         target_filters: mode === 'filter' ? targetFilters : {},
         target_identifiers: mode === 'specific' ? selectedIdentifiers : [],
+        target_segment_ids: mode === 'segment' ? segmentIds : [],
     };
 }
 
@@ -178,15 +181,15 @@ function TargetPicker({ value, onChange, initialRole = 'mahasiswa', disabled = f
         && selectablePageIdentifiers.every((identifier) => selectedIdentifierSet.has(identifier));
 
     const payload = useMemo(
-        () => buildPayload(role, state.mode, appliedFilters, selectedIdentifiers),
-        [role, state.mode, appliedFilters, selectedIdentifiers],
+        () => buildPayload(role, state.mode, appliedFilters, selectedIdentifiers, value?.target_segment_ids || []),
+        [role, state.mode, appliedFilters, selectedIdentifiers, value?.target_segment_ids],
     );
 
     useEffect(() => {
         if (initialized) return;
         const nextRole = ['mahasiswa', 'dosen'].includes(value?.target_role) ? value.target_role : initialRole;
         setRole(nextRole);
-        setMode(value?.scope_type === 'specific' ? 'specific' : 'filter');
+        setMode(value?.scope_type === 'segment' ? 'segment' : value?.scope_type === 'specific' ? 'specific' : 'filter');
         const initialFilters = normalizeInitialFilters(value, nextRole);
         setFilters(initialFilters);
         setAppliedFilters(initialFilters);
@@ -205,7 +208,7 @@ function TargetPicker({ value, onChange, initialRole = 'mahasiswa', disabled = f
         pendingControlledFingerprintRef.current = nextFingerprint;
         const nextRole = ['mahasiswa', 'dosen'].includes(value?.target_role) ? value.target_role : initialRole;
         setRole(nextRole);
-        setMode(value?.scope_type === 'specific' ? 'specific' : 'filter');
+        setMode(value?.scope_type === 'segment' ? 'segment' : value?.scope_type === 'specific' ? 'specific' : 'filter');
         dispatch({
             type: 'SELECT_ALL_FILTERED',
             payload: Array.isArray(value?.target_identifiers) ? value.target_identifiers.map(String) : [],

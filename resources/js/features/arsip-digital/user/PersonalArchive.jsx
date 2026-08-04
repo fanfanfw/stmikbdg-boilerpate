@@ -61,6 +61,10 @@ function fileId(file) {
     return file?.file_id ?? file?.id;
 }
 
+function rowId(file) {
+    return file?.row_id ?? fileId(file);
+}
+
 function categoryId(category) {
     return category?.category_id ?? category?.id;
 }
@@ -195,7 +199,7 @@ export default function PersonalArchive() {
 
     const handleDownload = async (file) => {
         try {
-            if (file?.source_type === 'distribution') {
+            if (['distribution', 'institutional_distribution'].includes(file?.source_type)) {
                 await arsipApi.downloadDistributionFile(file);
             } else {
                 await arsipApi.downloadFile(file);
@@ -401,7 +405,7 @@ export default function PersonalArchive() {
     );
     const visibleFiles = useMemo(() => listData.data.filter((file) => {
         const currentCategoryId = file.category_id ?? file.category?.category_id ?? file.category?.id ?? '';
-        return activeCategoryId ? String(currentCategoryId) === String(activeCategoryId) : !currentCategoryId;
+        return activeCategoryId ? String(currentCategoryId) === String(activeCategoryId) : !currentCategoryId || file.source_type === 'institutional_distribution';
     }), [listData.data, activeCategoryId]);
     const tableRows = useMemo(() => {
         const counts = new Map();
@@ -752,7 +756,7 @@ export default function PersonalArchive() {
                     rowCount={(listData.meta?.total ?? listData.data.length) + (activeCategoryId ? 0 : personalCategories.length)}
                     paginationModel={{ page: filters.page, pageSize: filters.per_page }}
                     onPaginationModelChange={handlePaginationChange}
-                    getRowId={(row) => row.row_type === 'folder' ? row.row_id : fileId(row)}
+                    getRowId={(row) => row.row_type === 'folder' ? row.row_id : rowId(row)}
                     pageSizeOptions={[10, 25, 50]}
                 />
             </div>

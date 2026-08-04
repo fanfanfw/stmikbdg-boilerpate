@@ -28,6 +28,59 @@ export async function runStorageSync({ capture, trigger, onJob, onError, formatE
 
 export const uploadPercent = event => event?.total > 0 ? Math.min(100, Math.round((event.loaded * 100) / event.total)) : null;
 export const validationErrors = formatted => formatted?.errors || {};
+export const classificationPayload = (type, form) => type === 'unit'
+    ? { name: form.name.trim(), code: form.code.trim() || null, description: form.description.trim() || null }
+    : { name: form.name.trim(), parent_category_id: form.parent_category_id || null, description: form.description.trim() || null };
+export async function runClassificationLoad({ requests, load, formatError, onSuccess, onError }) {
+    const sequence = requests.next();
+    try {
+        const result = await load();
+        if (!requests.valid(sequence)) return false;
+        onSuccess(result);
+        return true;
+    } catch (error) {
+        if (!requests.valid(sequence)) return false;
+        const formatted = await formatError(error);
+        if (requests.valid(sequence)) onError(formatted.message);
+        return false;
+    }
+}
+export async function runClassificationCreate({ type, form, lock, capture = { valid: () => true }, create, refresh, formatError, onBusy = () => {}, onCreated, onRefreshed, onWarning, onError }) {
+    if (!capture.valid() || lock.current || !form.name.trim()) return false;
+    const owner = Symbol('classification-create');
+    lock.current = owner;
+    onBusy(true);
+    try {
+        const response = await create(classificationPayload(type, form));
+        if (!capture.valid() || lock.current !== owner) return false;
+        const key = type === 'unit' ? 'unit' : 'category';
+        const idKey = type === 'unit' ? 'unit_id' : 'category_id';
+        const formKey = type === 'unit' ? 'unit_id' : 'category_id';
+        const created = response.data?.[key] ?? response.data;
+        const updateForm = current => ({ ...current, [formKey]: created[idKey] });
+        onCreated(created, updateForm);
+        try {
+            const refreshed = await refresh();
+            if (!capture.valid() || lock.current !== owner) return false;
+            onRefreshed(refreshed, created);
+        } catch {
+            if (!capture.valid() || lock.current !== owner) return false;
+            onWarning('Data berhasil dibuat, tetapi daftar terbaru belum dapat dimuat. Pilihan baru tetap tersimpan.');
+        }
+        return true;
+    } catch (error) {
+        if (!capture.valid() || lock.current !== owner) return false;
+        const formatted = await formatError(error);
+        if (capture.valid() && lock.current === owner) onError(formatted.message, validationErrors(formatted));
+        return false;
+    } finally {
+        if (lock.current === owner) {
+            lock.current = false;
+            if (capture.valid()) onBusy(false);
+        }
+    }
+}
+export const classificationDialogState = (uploadOpen, createType, uploadForm) => ({ uploadOpen: Boolean(uploadOpen && !createType), createOpen: Boolean(createType), uploadForm });
 export const clearNativeFileInput = ref => { if (ref?.current) ref.current.value = ''; };
 export const versionHistoryRequest = page => ({ page, per_page: 10 });
 export const versionHistoryState = versions => versions.map(version => ({ ...version, current_label: version.is_current ? 'Saat ini' : '' }));
@@ -48,6 +101,14 @@ export const distributionTargetFingerprint = targets => JSON.stringify(canonical
     target_criteria: targets?.target_criteria || {},
 }));
 export const distributionPreviewConfirmed = (preview, targets, previewFingerprint = preview?.target_fingerprint) => Boolean(preview && preview.total_valid > 0 && preview.total_invalid === 0 && previewFingerprint === distributionTargetFingerprint(targets));
+export const distributionTargetChange = (currentTargets, nextTargets, preview, previewFingerprint) => distributionTargetFingerprint(currentTargets) === distributionTargetFingerprint(nextTargets)
+    ? { targets: nextTargets, preview, previewFingerprint }
+    : { targets: nextTargets, preview: null, previewFingerprint: null };
+export const distributionPreviewSamples = preview => {
+    const targets = [...(preview?.valid_targets || []), ...(preview?.invalid_targets || [])];
+    const rows = targets.slice(0, 10);
+    return { rows, remaining: Math.max(0, (Number(preview?.total_valid) || 0) + (Number(preview?.total_invalid) || 0) - rows.length) };
+};
 export const recipientPageRequest = (page, perPage = 25) => ({ page: Math.max(1, Number(page) || 1), per_page: Math.min(100, Math.max(10, Number(perPage) || 25)) });
 export const recipientStatus = recipient => {
     if (recipient.deleted_at || recipient.availability_status === 'unavailable') return 'deleted';
@@ -56,6 +117,10 @@ export const recipientStatus = recipient => {
     return recipient.download_count > 0 ? 'downloaded' : (recipient.delivery_status || recipient.availability_status || 'available');
 };
 export const distributionListRequest = (page, perPage = 10) => ({ page: Math.max(1, Number(page) || 1), per_page: Math.min(100, Math.max(10, Number(perPage) || 10)) });
+export const distributionCountLabel = distribution => distribution?.status === 'draft'
+    ? (Number.isInteger(distribution.target_count) ? `Target draft: ${distribution.target_count}` : 'Target draft tersimpan')
+    : `Penerima: ${Number(distribution?.recipients_count) || 0}`;
+export const distributionEffectiveStatus = distribution => distribution?.effective_status || (distribution?.status === 'published' && distribution?.expires_at && new Date(distribution.expires_at) <= new Date() ? 'expired' : distribution?.status);
 export const distributionActionPolicy = active => ({ create: Boolean(active), previewTargets: Boolean(active), publish: Boolean(active), list: true, recipients: true, withdraw: true });
 export const recipientPreviewEndpoint = recipientId => `/distribution-recipients/${recipientId}/preview`;
 export async function loadControlledPage({ capture, request, page, perPage, requestParams, rowsKey }) { const response = await fetchDistributionPanelData(capture, () => request(requestParams(page, perPage))); if (response === null) return null; return { rows: response[rowsKey] || [], meta: response.meta || response.pagination || { current_page: page, last_page: 1, total: 0 } }; }
@@ -85,16 +150,34 @@ export const exactDistributionSource = distribution => {
     const source = distribution?.source_file;
     return distribution?.source_file_id && source?.file_id === distribution.source_file_id && source?.version_number && source?.display_filename ? { source_file_id: source.file_id, version_number: source.version_number, filename: source.display_filename } : null;
 };
-export async function runAuthoritativePublish({ capture, distributionId, fetchDistribution, confirm, publish, refresh, onStale, onError, formatError }) {
+export async function runDistributionMutation({ capture, mutate, refresh, onSuccess, onPartial, onError, formatError }) {
     try {
-        const distribution = await fetchDistribution(distributionId); if (!capture.valid()) return false;
-        const source = exactDistributionSource(distribution); if (!source || !confirm(source)) return false;
-        await publish(distributionId, { source_file_id: source.source_file_id }); if (!capture.valid()) return false;
-        await refresh(); return capture.valid();
+        const result = await mutate();
+        if (result === false || result == null || !capture.valid()) return false;
+        onSuccess();
+        try { await refresh(); } catch { if (capture.valid()) onPartial(); }
+        return capture.valid();
     } catch (error) {
         if (!capture.valid()) return false;
-        if (error?.response?.status === 409) { await refresh(); if (capture.valid()) onStale(); return false; }
-        const formatted = await formatError(error); if (capture.valid()) onError(formatted.message); return false;
+        const formatted = await formatError(error);
+        if (capture.valid()) onError(error, formatted);
+        return false;
+    }
+}
+
+export async function runAuthoritativePublish({ capture, distributionId, fetchDistribution, fetchTargets, confirm, publish, refresh, onStale, onError, formatError }) {
+    try {
+        const [distribution, targets] = await Promise.all([fetchDistribution(distributionId), fetchTargets(distributionId)]); if (!capture.valid()) return false;
+        const source = exactDistributionSource(distribution); if (!source || !targets?.updated_at || !targets?.target_fingerprint || !confirm(source)) return false;
+        const result = await publish(distributionId, { source_file_id: source.source_file_id, expected_updated_at: targets.updated_at, target_fingerprint: targets.target_fingerprint }); if (!capture.valid()) return false;
+        await refresh(); return result || true;
+    } catch (error) {
+        if (!capture.valid()) return false;
+        if (error?.response?.status === 409) {
+            await refresh();
+            if (capture.valid()) onStale();
+        }
+        throw error;
     }
 }
 
@@ -178,7 +261,7 @@ export const timelineRequestController = () => {
 export const safeTimelineItem = item => ({
     audit_log_id: item?.audit_log_id,
     label: typeof item?.label === 'string' ? item.label : 'Aktivitas arsip',
-    actor_user_id: Number.isInteger(item?.actor_user_id) ? item.actor_user_id : null,
+    actor_display_name: typeof item?.actor_display_name === 'string' && item.actor_display_name.trim() ? item.actor_display_name.trim() : null,
     occurred_at: typeof item?.occurred_at === 'string' ? item.occurred_at : null,
     reason: typeof item?.reason === 'string' ? item.reason : null,
     changed_fields: Array.isArray(item?.changed_fields) ? item.changed_fields.filter(value => typeof value === 'string') : [],
