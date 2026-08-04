@@ -18,6 +18,7 @@ import AdminAcademicDocuments from "./admin/AdminAcademicDocuments";
 import AdminInstitutionalArchives from "./admin/AdminInstitutionalArchives";
 import AdminInstitutionalArchiveDetail from "./admin/AdminInstitutionalArchiveDetail";
 import AdminInstitutionalArchiveTrash from "./admin/AdminInstitutionalArchiveTrash";
+import AdminInstitutionalStorage from "./admin/AdminInstitutionalStorage";
 import AdminAudit from "./admin/AdminAudit";
 import AdminSettings from "./admin/AdminSettings";
 
@@ -35,6 +36,7 @@ export default function ArsipDigitalRoutes() {
                 <Route path="/home" element={<AdminDashboard />} />
                 <Route path="/home/arsip-pengguna" element={<AdminArchive />} />
                 <Route path="/home/arsip-lembaga" element={<AdminInstitutionalArchives />} />
+                <Route path="/home/arsip-lembaga/storage" element={<AdminInstitutionalStorage />} />
                 <Route path="/home/arsip-lembaga/sampah" element={<AdminInstitutionalArchiveTrash />} />
                 <Route path="/home/arsip-lembaga/:id" element={<AdminInstitutionalArchiveDetail />} />
                 <Route path="/home/permintaan" element={<AdminRequests />} />

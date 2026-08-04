@@ -1,5 +1,25 @@
 import { useEffect, useRef, useCallback } from 'react';
 
+export async function runPollingJobTick({ active, busy, pollFn, jobId, terminalStatuses, onUpdate, onTerminal, stop }) {
+    if (!active() || busy.current) return false;
+    busy.current = true;
+    try {
+        const result = await pollFn(jobId);
+        if (!active()) return false;
+        onUpdate?.(result);
+        const status = result?.data?.status || result?.status;
+        if (status && terminalStatuses.includes(status)) {
+            stop();
+            if (active()) onTerminal?.({ jobId, timeout: false, status, data: result?.data || result });
+        }
+        return true;
+    } catch {
+        return false;
+    } finally {
+        busy.current = false;
+    }
+}
+
 // --------------------------------------------------------------------------
 // usePollingJob - Safe polling hook with cleanup, visibility, and max duration
 // --------------------------------------------------------------------------
@@ -28,8 +48,11 @@ export function usePollingJob({
 }) {
     const intervalRef = useRef(null);
     const isMountedRef = useRef(true);
+    const currentJobIdRef = useRef(jobId);
+    currentJobIdRef.current = jobId;
     const startTimeRef = useRef(null);
-    const isPollingRef = useRef(false);
+    const pollingGenerationRef = useRef(0);
+    const activePollRef = useRef(null);
     const timeoutWarningSentRef = useRef(false);
     const pollFnRef = useRef(pollFn);
     const terminalStatusesRef = useRef(terminalStatuses);
@@ -56,7 +79,8 @@ export function usePollingJob({
 
     const poll = useCallback(async () => {
         const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
-        if (!isMountedRef.current || !jobId || isPollingRef.current || isHidden) return;
+        const generation = pollingGenerationRef.current;
+        if (!isMountedRef.current || !jobId || activePollRef.current === generation || isHidden) return;
 
         const currentMaxDurationMs = maxDurationMsRef.current;
         if (currentMaxDurationMs && startTimeRef.current) {
@@ -69,33 +93,22 @@ export function usePollingJob({
             }
         }
 
-        isPollingRef.current = true;
-
-        try {
-            const result = await pollFnRef.current(jobId);
-
-            if (!isMountedRef.current) return;
-
-            if (onUpdateRef.current) {
-                onUpdateRef.current(result);
-            }
-
-            const status = result?.data?.status || result?.status;
-            if (status && terminalStatusesRef.current.includes(status)) {
-                clearPolling();
-                if (onTerminalRef.current) {
-                    onTerminalRef.current({ jobId, timeout: false, status, data: result?.data || result });
-                }
-            }
-        } catch {
-            // Silently ignore poll errors; next interval will retry
-        } finally {
-            isPollingRef.current = false;
-        }
+        await runPollingJobTick({
+            active: () => isMountedRef.current && pollingGenerationRef.current === generation && String(currentJobIdRef.current) === String(jobId),
+            busy: { get current() { return activePollRef.current === generation; }, set current(value) { if (value) activePollRef.current = generation; else if (activePollRef.current === generation) activePollRef.current = null; } },
+            pollFn: pollFnRef.current,
+            jobId,
+            terminalStatuses: terminalStatusesRef.current,
+            onUpdate: onUpdateRef.current,
+            onTerminal: onTerminalRef.current,
+            stop: clearPolling,
+        });
     }, [jobId, clearPolling]);
 
     // Start/stop polling when enabled or jobId changes
     useEffect(() => {
+        pollingGenerationRef.current++;
+        activePollRef.current = null;
         if (!enabled || !jobId) {
             clearPolling();
             startTimeRef.current = null;

@@ -264,6 +264,52 @@ JS;
         $this->assertStringContainsString('const capture = controller.current.beginAction()', $panel);
     }
 
+    public function test_phase_seven_storage_helpers_and_wiring_execute(): void
+    {
+        $helper = base_path('resources/js/features/arsip-digital/admin/institutionalArchiveUi.js');
+        $script = <<<'JS'
+import assert from 'node:assert/strict';
+const { reconciliationProgress, runStorageSync, storageAvailability, storageDashboardController, storageDashboardView, storageFilesRequest, storageFileSort, storageSummaryState } = await import(process.argv[1]);
+const { runPollingJobTick } = await import(process.argv[2]);
+assert.deepEqual(storageSummaryState({total_bytes:'100',current_bytes:40,total_files:3,soft_deleted_bytes:10,soft_limit_bytes:200}),{total:100,current:40,versions:3,deleted:10,limit:200});
+assert.deepEqual(storageSummaryState({}),{total:0,current:0,versions:0,deleted:0,limit:null});
+assert.deepEqual(storageFilesRequest(2,25,{unit_id:7,category_id:'root',version:'historical',storage_availability:'missing',deleted:'only',sort:'created_at',direction:'asc'}),{page:2,per_page:25,storage_availability:'missing',unit_id:7,category_id:'root',version:'historical',deleted:'only',sort:'created_at',direction:'asc'});
+assert.deepEqual(storageFileSort([{field:'storage_availability',sort:'asc'}]),{sort:'storage_availability',direction:'asc'}); assert.deepEqual(storageFileSort([]),{sort:'file_size_bytes',direction:'desc'});
+assert.equal(storageAvailability('available'),'available'); assert.equal(storageAvailability('missing'),'missing'); assert.equal(storageAvailability('unknown'),'unknown'); assert.equal(storageAvailability('provider_error'),'unknown');
+assert.deepEqual(reconciliationProgress({status:'running',checked_files:3,total_files:4}),{status:'running',percent:75}); for(const status of ['queued','running','completed','failed']) assert.equal(reconciliationProgress({status}).status,status);
+for(const [input,view] of [[{loading:true,error:'',summary:null},'loading'],[{loading:false,error:'x',summary:null},'error'],[{loading:false,error:'',summary:null},'empty'],[{loading:false,error:'',summary:{}},'ready']]) assert.equal(storageDashboardView(input),view);
+const controller=storageDashboardController(); const old=controller.capture('summary'); const latest=controller.capture('summary'); assert.equal(old.valid(),false); assert.equal(latest.valid(),true); const action=controller.beginSync(); assert.ok(action); assert.equal(controller.beginSync(),null); let resumed=null,error=''; assert.equal(await runStorageSync({capture:action,trigger:async()=>({data:{job:{job_id:9,status:'queued'}}}),onJob:value=>resumed=value,onError:value=>error=value,formatError:async()=>({message:'safe'})}),true); assert.equal(resumed.job_id,9); assert.equal(controller.release(action),true);
+const conflict=controller.beginSync(); resumed=null; assert.equal(await runStorageSync({capture:conflict,trigger:async()=>{throw {response:{status:409,data:{data:{job:{job_id:10,status:'running'}}}}}},onJob:value=>resumed=value,onError:value=>error=value,formatError:async()=>({message:'must not leak'})}),true); assert.equal(resumed.job_id,10); controller.release(conflict);
+const staleJob=controller.resume(10); const currentJob=controller.resume(11); assert.equal(staleJob.valid(),false); assert.equal(currentJob.valid(),true); controller.change(); assert.equal(currentJob.valid(),false); const staleAction=controller.beginSync(); let staleToast=0; controller.close(); assert.equal(await runStorageSync({capture:staleAction,trigger:async()=>{throw new Error('secret')},onJob:()=>staleToast++,onError:()=>staleToast++,formatError:async()=>{staleToast++;return{message:'x'}}}),false); assert.equal(staleToast,0); assert.equal(controller.release(staleAction),false);
+const statuses=['queued','running','completed']; const busy={current:false}; let calls=0,updates=[],terminals=0,refreshes=0,stops=0,active=true; const pollFn=async id=>{calls++;assert.equal(id,21);return{job_id:id,status:statuses.shift()}}; const tick=()=>runPollingJobTick({active:()=>active,busy,pollFn,jobId:21,terminalStatuses:['completed','failed'],onUpdate:value=>updates.push(value.status),onTerminal:()=>{terminals++;refreshes++;},stop:()=>stops++}); assert.equal(await tick(),true); assert.equal(await tick(),true); assert.equal(await tick(),true); assert.deepEqual(updates,['queued','running','completed']); assert.deepEqual([calls,terminals,refreshes,stops],[3,1,1,1]);
+let releaseOverlap; const overlapGate=new Promise(resolve=>releaseOverlap=resolve); calls=0; const overlapping=runPollingJobTick({active:()=>active,busy,pollFn:async()=>{calls++;await overlapGate;return{status:'running'}},jobId:21,terminalStatuses:['completed'],stop:()=>{}}); assert.equal(await runPollingJobTick({active:()=>active,busy,pollFn:async()=>{calls++;return{status:'running'}},jobId:21,terminalStatuses:['completed'],stop:()=>{}}),false); assert.equal(calls,1); releaseOverlap(); assert.equal(await overlapping,true);
+let staleUpdates=0,resolveStale; active=true; const stalePending=runPollingJobTick({active:()=>active,busy,pollFn:()=>new Promise(resolve=>resolveStale=resolve),jobId:22,terminalStatuses:['completed'],onUpdate:()=>staleUpdates++,onTerminal:()=>staleUpdates++,stop:()=>staleUpdates++}); active=false; resolveStale({job_id:22,status:'completed'}); assert.equal(await stalePending,false); assert.equal(staleUpdates,0);
+let generation=1,resolveOld,oldUpdates=0,newUpdates=0,newStops=0,newTerminals=0; const oldBusy={current:false},newBusy={current:false}; const oldPending=runPollingJobTick({active:()=>generation===1,busy:oldBusy,pollFn:()=>new Promise(resolve=>resolveOld=resolve),jobId:22,terminalStatuses:['completed'],onUpdate:()=>oldUpdates++,onTerminal:()=>oldUpdates++,stop:()=>oldUpdates++}); generation=2; assert.equal(await runPollingJobTick({active:()=>generation===2,busy:newBusy,pollFn:async()=>({job_id:23,status:'running'}),jobId:23,terminalStatuses:['completed'],onUpdate:value=>{assert.equal(value.job_id,23);newUpdates++;},onTerminal:()=>newTerminals++,stop:()=>newStops++}),true); resolveOld({job_id:22,status:'completed'}); assert.equal(await oldPending,false); assert.deepEqual([oldUpdates,newUpdates,newStops,newTerminals],[0,1,0,0]); assert.equal(await runPollingJobTick({active:()=>generation===2,busy:newBusy,pollFn:async()=>({job_id:23,status:'completed'}),jobId:23,terminalStatuses:['completed'],onUpdate:()=>newUpdates++,onTerminal:()=>newTerminals++,stop:()=>newStops++}),true); assert.deepEqual([newUpdates,newStops,newTerminals],[2,1,1]);
+console.log('phase7-behavior-ok');
+JS;
+        $polling = base_path('resources/js/features/arsip-digital/hooks/usePollingJob.js');
+        $process = proc_open(['node', '--input-type=module', '--eval', $script, 'file://'.$helper, 'file://'.$polling], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, base_path());
+        $stdout = stream_get_contents($pipes[1]);
+        $stderr = stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $this->assertSame(0, proc_close($process), $stderr);
+        $this->assertStringContainsString('phase7-behavior-ok', $stdout);
+        $api = file_get_contents(base_path('resources/js/libs/arsip_api.js'));
+        foreach (['institutionalStorageSummary', 'institutionalStorageFiles', 'triggerInstitutionalStorageReconciliation', 'institutionalStorageReconciliationJob'] as $method) {
+            $this->assertStringContainsString($method, $api);
+        }
+        $page = file_get_contents(base_path('resources/js/features/arsip-digital/admin/AdminInstitutionalStorage.jsx'));
+        foreach (['CustomDataTable', 'paginationMode="server"', 'sortingMode="server"', 'usePollingJob', "['queued', 'running']", "['completed', 'failed']", 'reconciliation_stale', 'Bukan kapasitas provider', 'available', 'missing', 'unknown', "setSummaryError('')", "setFilesError('')", 'actionError || summaryError || filesError'] as $contract) {
+            $this->assertStringContainsString($contract, $page);
+        }
+        foreach (['storage_path', 'requested_by_user_id', 'error_message', 'deleteInstitutionalStorage'] as $secret) {
+            $this->assertStringNotContainsString($secret, $page);
+        }
+        $routes = file_get_contents(base_path('resources/js/features/arsip-digital/routes.jsx'));
+        $this->assertLessThan(strpos($routes, '/home/arsip-lembaga/:id'), strpos($routes, '/home/arsip-lembaga/storage'));
+    }
+
     public function test_versioning_detail_wires_production_helpers_api_routes_and_visible_contract(): void
     {
         $detail = file_get_contents(base_path('resources/js/features/arsip-digital/admin/AdminInstitutionalArchiveDetail.jsx'));

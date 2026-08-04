@@ -1,3 +1,31 @@
+export const storageBytes = value => `${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format((Number(value) || 0) / 1024 / 1024)} MB`;
+export const storageAvailability = value => ['available', 'missing', 'unknown'].includes(value) ? value : 'unknown';
+export const storageSummaryState = summary => ({
+    total: Number(summary?.total_bytes) || 0,
+    current: Number(summary?.current_bytes) || 0,
+    versions: Number(summary?.total_files) || 0,
+    deleted: Number(summary?.soft_deleted_bytes) || 0,
+    limit: Number(summary?.soft_limit_bytes) > 0 ? Number(summary.soft_limit_bytes) : null,
+});
+export const storageFilesRequest = (page, perPage, filters = {}) => compactQuery({ page: Math.max(1, Number(page) || 1), per_page: Math.min(100, Math.max(10, Number(perPage) || 20)), storage_availability: filters.storage_availability, unit_id: filters.unit_id, category_id: filters.category_id, version: filters.version, deleted: filters.deleted, sort: filters.sort || 'file_size_bytes', direction: filters.direction || 'desc' });
+export const storageFileSort = model => ({ sort: ['file_size_bytes', 'created_at', 'storage_availability'].includes(model?.[0]?.field) ? model[0].field : 'file_size_bytes', direction: model?.[0]?.sort || 'desc' });
+export const storageDashboardView = ({ loading, error, summary }) => loading ? 'loading' : error ? 'error' : summary ? 'ready' : 'empty';
+export const reconciliationProgress = job => ({ status: ['queued', 'running', 'completed', 'failed'].includes(job?.status) ? job.status : 'unknown', percent: job?.total_files > 0 ? Math.min(100, Math.round((Number(job.checked_files) || 0) * 100 / job.total_files)) : 0 });
+export const storageDashboardController = () => {
+    let mounted = true; let generation = 0; let owner = null; const requests = new Map(); let jobId = null;
+    const valid = capture => mounted && capture.generation === generation && requests.get(capture.kind) === capture.token && (capture.kind !== 'job' || String(capture.jobId) === String(jobId));
+    return {
+        capture(kind) { const capture = { kind, generation, jobId, token: Symbol(kind) }; requests.set(kind, capture.token); return { ...capture, valid: () => valid(capture) }; },
+        beginSync() { if (!mounted || owner) return null; owner = Symbol('storage-sync'); const actionOwner = owner; const capture = this.capture('action'); return { ...capture, owner: actionOwner, valid: () => owner === actionOwner && valid(capture) }; },
+        release(capture) { if (!capture || capture.owner !== owner) return false; const active = capture.valid(); owner = null; return active; },
+        resume(id) { jobId = id; requests.delete('job'); return this.capture('job'); },
+        currentJob() { return jobId; }, busy() { return owner !== null; },
+        change() { generation++; owner = null; requests.clear(); jobId = null; },
+        close() { mounted = false; this.change(); },
+    };
+};
+export async function runStorageSync({ capture, trigger, onJob, onError, formatError }) { try { const response = await trigger(); if (!capture.valid()) return false; onJob(response?.data?.job || response?.job); return true; } catch (error) { if (!capture.valid()) return false; if (error?.response?.status === 409 && error.response.data?.data?.job) { onJob(error.response.data.data.job); return true; } const formatted = await formatError(error); if (capture.valid()) onError(formatted.message); return false; } }
+
 export const uploadPercent = event => event?.total > 0 ? Math.min(100, Math.round((event.loaded * 100) / event.total)) : null;
 export const validationErrors = formatted => formatted?.errors || {};
 export const clearNativeFileInput = ref => { if (ref?.current) ref.current.value = ''; };
