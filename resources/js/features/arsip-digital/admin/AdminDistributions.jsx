@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Swal from 'sweetalert2';
 import { arsipApi } from '../../../libs/arsip_api';
 import { formatArsipError } from '../../../libs/arsip_http';
 import { bytes, dateTime } from '../../../libs/format';
 import { customSwal } from '../../../components/CustomSwal';
+import { confirmAction, promptText } from '../../../services/dialogs';
 import PageHeader from '../../../components/PageHeader';
 import StatusChip from '../../../components/StatusChip';
 import CustomDataTable from '../../../components/CustomDataTable';
@@ -60,11 +60,6 @@ function canSubmitTarget(payload) {
     if (!payload?.target_role || !payload?.scope_type) return false;
     if (payload.scope_type === 'specific') return (payload.target_identifiers || []).length > 0;
     return true;
-}
-
-async function confirmAction(title, text, confirmButtonText = 'Ya') {
-    const result = await Swal.fire({ title, text, icon: 'question', showCancelButton: true, confirmButtonText, cancelButtonText: 'Batal' });
-    return result.isConfirmed;
 }
 
 function normalizeTarget(row) {
@@ -303,7 +298,7 @@ export default function AdminDistributions() {
     };
 
     const publish = async (row) => {
-        if (!(await confirmAction('Publish distribusi?', 'Daftar penerima akan dibuat dan file bisa diupload.', 'Publish'))) return;
+        if (!(await confirmAction({ title: 'Publish distribusi?', text: 'Daftar penerima akan dibuat dan file bisa diupload.', confirmText: 'Publish' }))) return;
         try {
             await arsipApi.publishDistribution(distributionId(row));
             customSwal.toast.success({ message: 'Distribusi dipublish.' });
@@ -315,10 +310,10 @@ export default function AdminDistributions() {
     };
 
     const withdraw = async (row) => {
-        const result = await Swal.fire({ title: 'Tarik distribusi?', text: 'Distribusi tidak lagi terlihat oleh penerima. Alasan wajib diisi.', input: 'textarea', inputLabel: 'Alasan penarikan', inputValidator: (value) => value?.trim() ? undefined : 'Alasan wajib diisi.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Tarik Distribusi', cancelButtonText: 'Batal' });
-        if (!result.isConfirmed) return;
+        const reason = await promptText({ title: 'Tarik distribusi?', text: 'Distribusi tidak lagi terlihat oleh penerima. Alasan wajib diisi.', inputLabel: 'Alasan penarikan', confirmText: 'Tarik Distribusi' });
+        if (!reason) return;
         try {
-            await arsipApi.withdrawDistribution(distributionId(row), result.value.trim());
+            await arsipApi.withdrawDistribution(distributionId(row), reason);
             customSwal.toast.success({ message: 'Distribusi berhasil ditarik.' });
             await loadDistributions();
         } catch (err) {
@@ -328,7 +323,7 @@ export default function AdminDistributions() {
     };
 
     const createCorrection = async (row) => {
-        if (!(await confirmAction('Buat koreksi?', 'Draft baru akan dibuat dari distribusi ini.', 'Buat Koreksi'))) return;
+        if (!(await confirmAction({ title: 'Buat koreksi?', text: 'Draft baru akan dibuat dari distribusi ini.', confirmText: 'Buat Koreksi' }))) return;
         try {
             const response = await arsipApi.createDistributionCorrection(distributionId(row));
             const correction = unwrapOne(response, ['distribution', 'correction']);
@@ -345,7 +340,7 @@ export default function AdminDistributions() {
     };
 
     const remove = async (row) => {
-        if (!(await confirmAction('Hapus draft distribusi?', 'Draft akan disembunyikan. Distribusi published/closed tidak dapat dihapus; gunakan Tarik Distribusi.', 'Hapus Draft'))) return;
+        if (!(await confirmAction({ title: 'Hapus draft distribusi?', text: 'Draft akan disembunyikan. Distribusi published/closed tidak dapat dihapus; gunakan Tarik Distribusi.', confirmText: 'Hapus Draft', icon: 'warning' }))) return;
         try {
             await arsipApi.deleteDistribution(distributionId(row));
             customSwal.toast.success({ message: 'Distribusi dihapus.' });
@@ -439,7 +434,7 @@ export default function AdminDistributions() {
 
     const confirmBulk = async () => {
         if (!bulkJob || bulkJob.status !== 'preview_ready' || bulkJob.confirmable === false) return;
-        if (!(await confirmAction('Konfirmasi simpan file cocok?', 'Hanya file Matched yang disimpan. Unmatched, Duplicate, Ambiguous, dan Invalid akan dilewati.', 'Konfirmasi'))) return;
+        if (!(await confirmAction({ title: 'Konfirmasi simpan file cocok?', text: 'Hanya file Matched yang disimpan. Unmatched, Duplicate, Ambiguous, dan Invalid akan dilewati.', confirmText: 'Konfirmasi' }))) return;
         setActionLoading(true);
         try {
             const response = await arsipApi.confirmDistributionBulkUploadJob(activeJobId);
@@ -457,7 +452,7 @@ export default function AdminDistributions() {
     };
 
     const cancelBulk = async () => {
-        if (!bulkJob || !(await confirmAction('Batalkan bulk ZIP?', 'Preview tidak dapat dikonfirmasi setelah dibatalkan.', 'Batalkan'))) return;
+        if (!bulkJob || !(await confirmAction({ title: 'Batalkan bulk ZIP?', text: 'Preview tidak dapat dikonfirmasi setelah dibatalkan.', confirmText: 'Batalkan', icon: 'warning' }))) return;
         setActionLoading(true);
         try {
             const response = await arsipApi.cancelDistributionBulkUploadJob(activeJobId);

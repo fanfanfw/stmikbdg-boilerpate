@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import Swal from 'sweetalert2';
 import { arsipApi } from '../../../libs/arsip_api';
 import { formatArsipError } from '../../../libs/arsip_http';
 import { dateTime, lines } from '../../../libs/format';
 import { customSwal } from '../../../components/CustomSwal';
+import { confirmAction } from '../../../services/dialogs';
 import PageHeader from '../../../components/PageHeader';
 import StatusChip from '../../../components/StatusChip';
 import CustomDataTable from '../../../components/CustomDataTable';
@@ -100,18 +100,6 @@ function canSubmitTarget(payload) {
 }
 
 const emptyPreview = { total_valid: 0, total_invalid: 0, total_targets: 0, valid_targets: [], invalid_targets: [] };
-
-async function confirmAction(title, text, confirmButtonText = 'Ya') {
-    const result = await Swal.fire({
-        title,
-        text,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText,
-        cancelButtonText: 'Batal',
-    });
-    return result.isConfirmed;
-}
 
 export default function AdminRequests() {
     const navigate = useNavigate();
@@ -264,7 +252,7 @@ export default function AdminRequests() {
     };
 
     const runLifecycle = async (request, action, title, text, success) => {
-        if (!(await confirmAction(title, text))) return;
+        if (!(await confirmAction({ title, text }))) return;
         try {
             await action(requestId(request));
             customSwal.toast.success({ message: success });
@@ -283,7 +271,7 @@ export default function AdminRequests() {
     const canRemovePreviewTarget = targetPayload?.scope_type === 'specific';
 
     const deleteRequest = async (request) => {
-        if (!(await confirmAction('Hapus request?', 'Request akan dihapus permanen.', 'Hapus'))) return;
+        if (!(await confirmAction({ title: 'Hapus request?', text: 'Request akan dihapus permanen.', confirmText: 'Hapus', icon: 'warning' }))) return;
         try {
             await arsipApi.deleteRequest(requestId(request));
             customSwal.toast.success({ message: 'Request berhasil dihapus.' });

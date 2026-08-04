@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import Swal from 'sweetalert2';
 import { arsipApi } from '../../../libs/arsip_api';
 import { formatArsipError } from '../../../libs/arsip_http';
 import { bytes, dateTime } from '../../../libs/format';
 import { customSwal } from '../../../components/CustomSwal';
+import { confirmAction, promptText } from '../../../services/dialogs';
 import PageHeader from '../../../components/PageHeader';
 import StatusChip from '../../../components/StatusChip';
 import CustomDataTable from '../../../components/CustomDataTable';
@@ -94,32 +94,7 @@ function progressValue(progress, keys) {
     return 0;
 }
 
-async function confirmAction(title, text, confirmButtonText = 'Ya') {
-    const result = await Swal.fire({
-        title,
-        text,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText,
-        cancelButtonText: 'Batal',
-    });
-    return result.isConfirmed;
-}
-
-async function promptReason(title, text) {
-    const result = await Swal.fire({
-        title,
-        text,
-        input: 'textarea',
-        inputLabel: 'Alasan penolakan',
-        inputPlaceholder: 'Tulis alasan agar pengguna tahu yang perlu diperbaiki.',
-        inputValidator: (value) => (value?.trim() ? null : 'Alasan wajib diisi.'),
-        showCancelButton: true,
-        confirmButtonText: 'Reject',
-        cancelButtonText: 'Batal',
-    });
-    return result.isConfirmed ? result.value?.trim() : '';
-}
+const promptReason = (title, text) => promptText({ title, text, inputLabel: 'Alasan penolakan', placeholder: 'Tulis alasan agar pengguna tahu yang perlu diperbaiki.', confirmText: 'Reject' });
 
 export default function AdminRequestDetail() {
     const { id } = useParams();
@@ -228,7 +203,7 @@ export default function AdminRequestDetail() {
     };
 
     const runLifecycle = async (action, title, text, success) => {
-        if (!request || !(await confirmAction(title, text))) return;
+        if (!request || !(await confirmAction({ title, text }))) return;
         setActionLoading(true);
         try {
             await action(requestId(request));
@@ -244,7 +219,7 @@ export default function AdminRequestDetail() {
 
     const approve = async (assignment) => {
         if (!isVerifiable(assignment) || currentFiles(assignment).length < 1) return;
-        if (!(await confirmAction('Approve assignment?', `${assignment.identifier} - ${assignment.name_snapshot || 'tanpa nama'}`, 'Approve'))) return;
+        if (!(await confirmAction({ title: 'Approve assignment?', text: `${assignment.identifier} - ${assignment.name_snapshot || 'tanpa nama'}`, confirmText: 'Approve' }))) return;
         setActionLoading(true);
         try {
             await arsipApi.approveAssignment(assignmentId(assignment));
@@ -277,7 +252,7 @@ export default function AdminRequestDetail() {
 
     const bulkApprove = async () => {
         if (!approvableSelectedIds.length) return;
-        if (!(await confirmAction('Bulk approve assignment?', `${approvableSelectedIds.length} assignment di halaman ini akan disetujui.`, 'Bulk approve'))) return;
+        if (!(await confirmAction({ title: 'Bulk approve assignment?', text: `${approvableSelectedIds.length} assignment di halaman ini akan disetujui.`, confirmText: 'Bulk approve' }))) return;
         setActionLoading(true);
         try {
             await arsipApi.bulkApproveAssignments(approvableSelectedIds);
@@ -355,7 +330,7 @@ export default function AdminRequestDetail() {
             customSwal.toast.error({ message: 'Pilih minimal satu target spesifik.' });
             return;
         }
-        if (!(await confirmAction('Tambah target?', `${selectedCount} target terpilih akan diproses.`, 'Tambahkan'))) return;
+        if (!(await confirmAction({ title: 'Tambah target?', text: `${selectedCount} target terpilih akan diproses.`, confirmText: 'Tambahkan' }))) return;
         setAppendLoading(true);
         try {
             await arsipApi.appendRequestTargets(requestId(request), appendPayload);

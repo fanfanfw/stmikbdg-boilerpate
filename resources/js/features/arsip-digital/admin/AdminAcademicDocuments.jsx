@@ -12,6 +12,7 @@ import PageHeader from '../../../components/PageHeader';
 import CustomDataTable from '../../../components/CustomDataTable';
 import StatusChip from '../../../components/StatusChip';
 import { customSwal } from '../../../components/CustomSwal';
+import { confirmAction } from '../../../services/dialogs';
 import { arsipApi } from '../../../libs/arsip_api';
 import { formatArsipError } from '../../../libs/arsip_http';
 import { dateTime } from '../../../libs/format';
@@ -181,15 +182,7 @@ export default function AdminAcademicDocuments() {
     };
 
     const distribute = async (document) => {
-        const result = await Swal.fire({
-            title: 'Distribusikan dokumen resmi?',
-            text: 'Dokumen akan tersedia pada akun mahasiswa pemiliknya.',
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonText: 'Distribusikan',
-            cancelButtonText: 'Batal',
-        });
-        if (!result.isConfirmed) return;
+        if (!(await confirmAction({ title: 'Distribusikan dokumen resmi?', text: 'Dokumen akan tersedia pada akun mahasiswa pemiliknya.', confirmText: 'Distribusikan' }))) return;
 
         try {
             await arsipApi.distributeAcademicDocument(document.official_document_id);

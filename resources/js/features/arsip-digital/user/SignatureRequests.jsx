@@ -7,6 +7,7 @@ import { useUser } from '../../../contexts/UserContext';
 import { arsipApi } from '../../../libs/arsip_api';
 import { formatArsipError } from '../../../libs/arsip_http';
 import { customSwal } from '../../../components/CustomSwal';
+import { confirmAction } from '../../../services/dialogs';
 
 const studentLabels = { requested: 'Request', draft: 'Pending', completed: 'Completed', rejected: 'Rejected', expired: 'Expired', cancelled: 'Cancelled' };
 const lecturerLabels = { requested: 'Menunggu Persetujuan', draft: 'Draft', completed: 'Completed', rejected: 'Rejected', expired: 'Expired', cancelled: 'Cancelled' };
@@ -63,7 +64,7 @@ function StudentRequests() {
         } catch (err) { setError((await formatArsipError(err)).message); }
     };
     const remove = async (item) => {
-        if (!(await customSwal.confirm.delete({ title: 'Hapus request?', text: 'Request yang dihapus tidak dapat dipulihkan.' })).isConfirmed) return;
+        if (!(await confirmAction({ title: 'Hapus request?', text: 'Request yang dihapus tidak dapat dipulihkan.', confirmText: 'Hapus', icon: 'warning' }))) return;
         try { await arsipApi.deleteSignatureRequest(idOf(item)); await load(); } catch (err) { setError((await formatArsipError(err)).message); }
     };
     return <div><PageHeader title="Request Tanda Tangan" subtitle="Kirim PDF dari Arsip Saya kepada dosen untuk ditandatangani." actions={<Button variant="contained" startIcon={<AddOutlined />} onClick={() => showForm()}>Buat Request</Button>} />

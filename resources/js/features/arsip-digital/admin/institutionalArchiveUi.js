@@ -168,7 +168,7 @@ export async function runDistributionMutation({ capture, mutate, refresh, onSucc
 export async function runAuthoritativePublish({ capture, distributionId, fetchDistribution, fetchTargets, confirm, publish, refresh, onStale, onError, formatError }) {
     try {
         const [distribution, targets] = await Promise.all([fetchDistribution(distributionId), fetchTargets(distributionId)]); if (!capture.valid()) return false;
-        const source = exactDistributionSource(distribution); if (!source || !targets?.updated_at || !targets?.target_fingerprint || !confirm(source)) return false;
+        const source = exactDistributionSource(distribution); if (!source || !targets?.updated_at || !targets?.target_fingerprint || !await confirm(source)) return false;
         const result = await publish(distributionId, { source_file_id: source.source_file_id, expected_updated_at: targets.updated_at, target_fingerprint: targets.target_fingerprint }); if (!capture.valid()) return false;
         await refresh(); return result || true;
     } catch (error) {
