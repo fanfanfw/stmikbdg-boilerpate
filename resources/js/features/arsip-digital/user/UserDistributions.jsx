@@ -3,7 +3,7 @@ import { arsipApi } from '../../../libs/arsip_api';
 import { formatArsipError } from '../../../libs/arsip_http';
 import { dateTime } from '../../../libs/format';
 import { customSwal } from '../../../components/CustomSwal';
-import { recipientPageRequest, recipientStatusView, requestSequence, runDownload, runPreview } from '../admin/institutionalArchiveUi';
+import { recipientPageRequest, recipientStatusView, runPreview, runRecipientAction, userDistributionController } from '../admin/institutionalArchiveUi';
 import PageHeader from '../../../components/PageHeader';
 import CustomLoading from '../../../components/CustomLoading';
 import {
@@ -38,27 +38,35 @@ function unwrapListResponse(response, key) {
 export default function UserDistributions() {
     const [listData, setListData] = useState({ data: [], meta: null });
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null); const [page, setPage] = useState(1); const requests = useRef(requestSequence()); const actionLock = useRef(false); const mounted = useRef(true);
+    const [error, setError] = useState(null); const [page, setPage] = useState(1); const controller = useRef(null); if (!controller.current) controller.current = userDistributionController();
 
-    const fetchDistributions = async (nextPage = page) => {
-        const owner = requests.current; const sequence = owner.next();
-        if (owner.valid(sequence)) { setLoading(true); setError(null); }
+    const fetchDistributions = async (nextPage = page, parentCapture = null) => {
+        const capture = controller.current.capture();
+        if (capture.valid()) { setLoading(true); setError(null); }
         try {
             const res = await arsipApi.userDistributions(recipientPageRequest(nextPage));
-            if (owner.valid(sequence)) { setListData(unwrapListResponse(res, 'distributions')); setPage(nextPage); }
+            if (capture.valid() && (!parentCapture || parentCapture.valid())) { setListData(unwrapListResponse(res, 'distributions')); setPage(nextPage); }
         } catch (err) {
+            if (!capture.valid() || (parentCapture && !parentCapture.valid())) return false;
             const formatted = await formatArsipError(err);
-            if (owner.valid(sequence)) setError(formatted.message);
+            if (capture.valid() && (!parentCapture || parentCapture.valid())) setError(formatted.message);
         } finally {
-            if (owner.valid(sequence)) setLoading(false);
+            if (capture.valid() && (!parentCapture || parentCapture.valid())) setLoading(false);
         }
+        return capture.valid();
     };
 
-    useEffect(() => { mounted.current = true; fetchDistributions(1); return () => { mounted.current = false; requests.current.invalidate(); }; }, []);
+    useEffect(() => { fetchDistributions(1); return () => controller.current.close(); }, []);
 
-    const fileError = async err => { const formatted = await formatArsipError(err); customSwal.toast.error({ title: err?.response?.status === 410 ? 'Berkas tidak tersedia' : 'Berkas gagal dibuka', message: formatted.message }); if (err?.response?.status === 410) await fetchDistributions(page); };
-    const handleDownload = file => { if (actionLock.current) return false; actionLock.current = true; return runDownload(() => arsipApi.downloadDistributionFile(file), fileError, async error => error).finally(() => { actionLock.current = false; }); };
-    const handlePreview = file => { if (actionLock.current) return false; actionLock.current = true; return runPreview(window.open.bind(window), () => arsipApi.previewDistributionRecipient(file.recipient_id), URL, fileError, async error => error, setTimeout, { valid: () => mounted.current }).finally(() => { actionLock.current = false; }); };
+    const fileError = async (capture, err, formatted) => { if (err?.response?.status === 410) await fetchDistributions(page, capture); if (capture.valid()) customSwal.toast.error({ title: err?.response?.status === 410 ? 'Berkas tidak tersedia' : 'Berkas gagal dibuka', message: formatted.message }); };
+    const handleDownload = file => {
+        const capture = controller.current.begin(); if (!capture) return false;
+        return runRecipientAction({ capture, action: () => arsipApi.downloadDistributionFile(file), refresh: () => fetchDistributions(page, capture), onSuccess: () => customSwal.toast.success({ title: 'Unduhan dimulai' }), onError: (err, formatted) => fileError(capture, err, formatted), formatError: formatArsipError }).finally(() => controller.current.release(capture));
+    };
+    const handlePreview = file => {
+        const capture = controller.current.begin(); if (!capture) return false;
+        return runRecipientAction({ capture, action: () => runPreview(window.open.bind(window), () => arsipApi.previewDistributionRecipient(file.recipient_id), URL, error => { throw error; }, async error => error, setTimeout, capture), onError: (err, formatted) => fileError(capture, err, formatted), formatError: formatArsipError }).finally(() => controller.current.release(capture));
+    };
 
     return (
         <Box className="font-jakarta">

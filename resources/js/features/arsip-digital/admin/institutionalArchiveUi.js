@@ -32,6 +32,25 @@ export const distributionActionPolicy = active => ({ create: Boolean(active), pr
 export const recipientPreviewEndpoint = recipientId => `/distribution-recipients/${recipientId}/preview`;
 export async function loadControlledPage({ capture, request, page, perPage, requestParams, rowsKey }) { const response = await fetchDistributionPanelData(capture, () => request(requestParams(page, perPage))); if (response === null) return null; return { rows: response[rowsKey] || [], meta: response.meta || response.pagination || { current_page: page, last_page: 1, total: 0 } }; }
 export const recipientStatusView = recipient => { const status = recipientStatus(recipient); return { status, color: status === 'available' || status === 'downloaded' ? 'success' : 'default' }; };
+export const userDistributionController = () => {
+    let mounted = true; let requestGeneration = 0; let owner = null;
+    return {
+        capture() { const token = ++requestGeneration; return { valid: () => mounted && token === requestGeneration }; },
+        begin() { if (!mounted || owner) return null; owner = Symbol('recipient-action'); const actionOwner = owner; return { valid: () => mounted && owner === actionOwner, owner: actionOwner }; },
+        release(capture) { if (capture?.owner !== owner) return false; const valid = capture.valid(); owner = null; return valid; },
+        close() { mounted = false; requestGeneration++; owner = null; },
+    };
+};
+export async function runRecipientAction({ capture, action, refresh, onSuccess, onError, formatError }) {
+    try {
+        const result = await action(); if (!capture.valid()) return false;
+        if (refresh) await refresh(); if (!capture.valid()) return false;
+        if (onSuccess) onSuccess(result); return true;
+    } catch (error) {
+        if (!capture.valid()) return false;
+        const formatted = await formatError(error); if (capture.valid()) await onError(error, formatted); return false;
+    }
+}
 export const distributionRecipientStatus = (recipient, distribution) => recipientStatus({ ...recipient, availability_status: distribution?.status === 'closed' || distribution?.status === 'withdrawn' ? 'withdrawn' : recipient.availability_status, expires_at: distribution?.expires_at ?? recipient.expires_at });
 export async function runControlledPageRefresh({ capture, refresh, onError, formatError }) { try { return await refresh(); } catch (error) { if (capture.valid()) { const formatted = await formatError(error); if (capture.valid()) onError(formatted.message); } return null; } }
 export const exactDistributionSource = distribution => {
