@@ -181,13 +181,13 @@ export default function MainLayout({ children }) {
                                     <div className="flex justify-between items-center">
                                         <div className="flex items-center lg:gap-3">
                                             <div className="lg:hidden">
-                                                <IconButton onClick={() => setShowSidebar(true)} size="small">
+                                                <IconButton aria-label="Buka sidebar navigasi" onClick={() => setShowSidebar(true)} size="small">
                                                     <MenuOutlined fontSize="small" />
                                                 </IconButton>
                                             </div>
-                                            <h1 className="text-lg md:text-xl font-semibold tracking-wide">
+                                            <div className="text-lg md:text-xl font-semibold tracking-wide">
                                                 Arsip Digital
-                                            </h1>
+                                            </div>
                                         </div>
                                         <ArsipNotificationBell enabled={isAdmin || isUser} />
                                     </div>
@@ -245,7 +245,7 @@ function SidebarContent({ menuItems, displayName, displayRole, pendingRequestCou
                                 </p>
                             </div>
                             {mobile && (
-                                <IconButton onClick={onClose} size="small">
+                                <IconButton aria-label="Tutup sidebar navigasi" onClick={onClose} size="small">
                                     <MenuOutlined fontSize="small" />
                                 </IconButton>
                             )}
