@@ -1,3 +1,4 @@
+import { recipientPreviewEndpoint } from '../features/arsip-digital/admin/institutionalArchiveUi';
 import {
     getJson,
     postJson,
@@ -42,7 +43,7 @@ export const arsipApi = {
     createInstitutionalDistribution: (id, payload) => postJson(`/admin/institutional-archives/${id}/distributions`, payload),
     institutionalDistributions: (id, params) => getJson(`/admin/institutional-archives/${id}/distributions`, params),
     institutionalDistribution: id => getJson(`/admin/institutional-distributions/${id}`),
-    publishInstitutionalDistribution: id => postJson(`/admin/institutional-distributions/${id}/publish`),
+    publishInstitutionalDistribution: (id, payload) => postJson(`/admin/institutional-distributions/${id}/publish`, payload),
     withdrawInstitutionalDistribution: (id, reason) => postJson(`/admin/institutional-distributions/${id}/withdraw`, { reason }),
     institutionalDistributionRecipients: (id, params) => getJson(`/admin/institutional-distributions/${id}/recipients`, params),
     uploadInstitutionalArchive: (formData, onUploadProgress) => uploadFormData('/admin/institutional-archives', formData, { onUploadProgress }),
@@ -175,7 +176,8 @@ export const arsipApi = {
         postJson(`/admin/distribution-bulk-upload-jobs/${jobId}/cancel`),
 
     // User Distributions
-    userDistributions: () => getJson('/distributions'),
+    userDistributions: (params) => getJson('/distributions', params),
+    previewDistributionRecipient: recipientId => getBlob(recipientPreviewEndpoint(recipientId)),
     downloadDistributionFile: (file) => {
         const recipientId = file?.recipient_id;
         if (recipientId == null) {

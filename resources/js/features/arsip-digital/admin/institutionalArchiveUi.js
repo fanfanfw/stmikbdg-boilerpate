@@ -20,8 +20,36 @@ export const distributionTargetFingerprint = targets => JSON.stringify(canonical
     target_criteria: targets?.target_criteria || {},
 }));
 export const distributionPreviewConfirmed = (preview, targets, previewFingerprint = preview?.target_fingerprint) => Boolean(preview && preview.total_valid > 0 && preview.total_invalid === 0 && previewFingerprint === distributionTargetFingerprint(targets));
-export const recipientPageRequest = page => ({ page, per_page: 25 });
-export const recipientStatus = recipient => recipient.download_count > 0 ? 'downloaded' : recipient.delivery_status;
+export const recipientPageRequest = (page, perPage = 25) => ({ page: Math.max(1, Number(page) || 1), per_page: Math.min(100, Math.max(10, Number(perPage) || 25)) });
+export const recipientStatus = recipient => {
+    if (recipient.deleted_at || recipient.availability_status === 'unavailable') return 'deleted';
+    if (recipient.withdrawn_at || recipient.status === 'closed' || recipient.status === 'withdrawn' || recipient.availability_status === 'withdrawn' || recipient.delivery_status === 'revoked') return 'withdrawn';
+    if (recipient.availability_status === 'expired' || (recipient.expires_at && new Date(recipient.expires_at) <= new Date())) return 'expired';
+    return recipient.download_count > 0 ? 'downloaded' : (recipient.delivery_status || recipient.availability_status || 'available');
+};
+export const distributionListRequest = (page, perPage = 10) => ({ page: Math.max(1, Number(page) || 1), per_page: Math.min(100, Math.max(10, Number(perPage) || 10)) });
+export const distributionActionPolicy = active => ({ create: Boolean(active), previewTargets: Boolean(active), publish: Boolean(active), list: true, recipients: true, withdraw: true });
+export const recipientPreviewEndpoint = recipientId => `/distribution-recipients/${recipientId}/preview`;
+export async function loadControlledPage({ capture, request, page, perPage, requestParams, rowsKey }) { const response = await fetchDistributionPanelData(capture, () => request(requestParams(page, perPage))); if (response === null) return null; return { rows: response[rowsKey] || [], meta: response.meta || response.pagination || { current_page: page, last_page: 1, total: 0 } }; }
+export const recipientStatusView = recipient => { const status = recipientStatus(recipient); return { status, color: status === 'available' || status === 'downloaded' ? 'success' : 'default' }; };
+export const distributionRecipientStatus = (recipient, distribution) => recipientStatus({ ...recipient, availability_status: distribution?.status === 'closed' || distribution?.status === 'withdrawn' ? 'withdrawn' : recipient.availability_status, expires_at: distribution?.expires_at ?? recipient.expires_at });
+export async function runControlledPageRefresh({ capture, refresh, onError, formatError }) { try { return await refresh(); } catch (error) { if (capture.valid()) { const formatted = await formatError(error); if (capture.valid()) onError(formatted.message); } return null; } }
+export const exactDistributionSource = distribution => {
+    const source = distribution?.source_file;
+    return distribution?.source_file_id && source?.file_id === distribution.source_file_id && source?.version_number && source?.display_filename ? { source_file_id: source.file_id, version_number: source.version_number, filename: source.display_filename } : null;
+};
+export async function runAuthoritativePublish({ capture, distributionId, fetchDistribution, confirm, publish, refresh, onStale, onError, formatError }) {
+    try {
+        const distribution = await fetchDistribution(distributionId); if (!capture.valid()) return false;
+        const source = exactDistributionSource(distribution); if (!source || !confirm(source)) return false;
+        await publish(distributionId, { source_file_id: source.source_file_id }); if (!capture.valid()) return false;
+        await refresh(); return capture.valid();
+    } catch (error) {
+        if (!capture.valid()) return false;
+        if (error?.response?.status === 409) { await refresh(); if (capture.valid()) onStale(); return false; }
+        const formatted = await formatError(error); if (capture.valid()) onError(formatted.message); return false;
+    }
+}
 
 export const distributionPanelController = (isCurrent = () => true) => {
     let archiveId = null; let generation = 0; let mounted = true; let owner = null; const requests = new Map();
@@ -228,7 +256,7 @@ export async function runDownload(download, onError, formatError) {
     return true;
 }
 
-export async function runPreview(openWindow, fetchBlob, urlApi, onError, formatError, schedule = setTimeout) {
+export async function runPreview(openWindow, fetchBlob, urlApi, onError, formatError, schedule = setTimeout, lifecycle) {
     const previewWindow = openWindow('', '_blank');
     if (!previewWindow) {
         onError('Popup preview diblokir. Izinkan popup lalu coba lagi.');
@@ -241,12 +269,15 @@ export async function runPreview(openWindow, fetchBlob, urlApi, onError, formatE
         previewWindow.document.write('<!doctype html><title>Memuat preview</title><p>Memuat preview arsip...</p>');
         previewWindow.document.close();
         const blob = await fetchBlob();
+        if (lifecycle && !lifecycle.valid()) { previewWindow.close(); return false; }
         url = urlApi.createObjectURL(blob);
         previewWindow.location.replace(url);
-        schedule(() => urlApi.revokeObjectURL(url), 60000);
+        let revoked = false; const revoke = () => { if (!revoked) { revoked = true; urlApi.revokeObjectURL(url); } };
+        schedule(revoke, 60000);
     } catch (error) {
         if (url) urlApi.revokeObjectURL(url);
         previewWindow.close();
+        if (lifecycle && !lifecycle.valid()) return false;
         onError((await formatError(error)).message);
         return false;
     }

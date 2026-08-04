@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { arsipApi } from '../../../libs/arsip_api';
 import { formatArsipError } from '../../../libs/arsip_http';
 import { dateTime } from '../../../libs/format';
 import { customSwal } from '../../../components/CustomSwal';
+import { recipientPageRequest, recipientStatusView, requestSequence, runDownload, runPreview } from '../admin/institutionalArchiveUi';
 import PageHeader from '../../../components/PageHeader';
 import CustomLoading from '../../../components/CustomLoading';
 import {
@@ -15,6 +16,7 @@ import {
     Chip,
     IconButton,
     Tooltip,
+    Pagination,
 } from '@mui/material';
 import {
     DownloadOutlined,
@@ -36,38 +38,27 @@ function unwrapListResponse(response, key) {
 export default function UserDistributions() {
     const [listData, setListData] = useState({ data: [], meta: null });
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState(null); const [page, setPage] = useState(1); const requests = useRef(requestSequence()); const actionLock = useRef(false); const mounted = useRef(true);
 
-    const fetchDistributions = async () => {
-        setLoading(true);
-        setError(null);
+    const fetchDistributions = async (nextPage = page) => {
+        const owner = requests.current; const sequence = owner.next();
+        if (owner.valid(sequence)) { setLoading(true); setError(null); }
         try {
-            const res = await arsipApi.userDistributions();
-            setListData(unwrapListResponse(res, 'distributions'));
+            const res = await arsipApi.userDistributions(recipientPageRequest(nextPage));
+            if (owner.valid(sequence)) { setListData(unwrapListResponse(res, 'distributions')); setPage(nextPage); }
         } catch (err) {
             const formatted = await formatArsipError(err);
-            setError(formatted.message);
+            if (owner.valid(sequence)) setError(formatted.message);
         } finally {
-            setLoading(false);
+            if (owner.valid(sequence)) setLoading(false);
         }
     };
 
-    useEffect(() => {
-        fetchDistributions();
-    }, []);
+    useEffect(() => { mounted.current = true; fetchDistributions(1); return () => { mounted.current = false; requests.current.invalidate(); }; }, []);
 
-    const handleDownload = async (file) => {
-        try {
-            await arsipApi.downloadDistributionFile(file);
-        } catch (err) {
-            const formatted = await formatArsipError(err);
-            customSwal.toast.error({
-                title: err?.response?.status === 410 ? 'Berkas tidak tersedia' : 'Gagal mengunduh',
-                message: formatted.message,
-            });
-            if (err?.response?.status === 410) await fetchDistributions();
-        }
-    };
+    const fileError = async err => { const formatted = await formatArsipError(err); customSwal.toast.error({ title: err?.response?.status === 410 ? 'Berkas tidak tersedia' : 'Berkas gagal dibuka', message: formatted.message }); if (err?.response?.status === 410) await fetchDistributions(page); };
+    const handleDownload = file => { if (actionLock.current) return false; actionLock.current = true; return runDownload(() => arsipApi.downloadDistributionFile(file), fileError, async error => error).finally(() => { actionLock.current = false; }); };
+    const handlePreview = file => { if (actionLock.current) return false; actionLock.current = true; return runPreview(window.open.bind(window), () => arsipApi.previewDistributionRecipient(file.recipient_id), URL, fileError, async error => error, setTimeout, { valid: () => mounted.current }).finally(() => { actionLock.current = false; }); };
 
     return (
         <Box className="font-jakarta">
@@ -79,7 +70,7 @@ export default function UserDistributions() {
                     <Button
                         variant="outlined"
                         startIcon={<RefreshOutlined />}
-                        onClick={fetchDistributions}
+                        onClick={() => fetchDistributions(page)}
                         disabled={loading}
                         size="small"
                         sx={{
@@ -108,7 +99,7 @@ export default function UserDistributions() {
                         <Button
                             color="inherit"
                             size="small"
-                            onClick={fetchDistributions}
+                            onClick={() => fetchDistributions(page)}
                         >
                             Coba Lagi
                         </Button>
@@ -168,7 +159,7 @@ export default function UserDistributions() {
                                     >
                                         {dist.title}
                                     </Typography>
-                                    <Chip label={dist.availability_status || 'available'} size="small" color={dist.availability_status === 'available' ? 'success' : 'default'} />
+                                    {(() => { const view = recipientStatusView({ ...dist, download_count: dist.recipients?.[0]?.download_count || 0 }); return <Chip label={view.status} size="small" color={view.color} />; })()}
                                     {dist.published_at && (
                                         <Chip
                                             icon={<CalendarTodayOutlined sx={{ fontSize: 14 }} />}
@@ -255,6 +246,7 @@ export default function UserDistributions() {
                                                             {file.display_filename || file.original_filename}
                                                         </Typography>
                                                     </Box>
+                                                    <Button size="small" onClick={() => handlePreview(file)}>Preview</Button>
                                                     <Tooltip title="Unduh file" arrow>
                                                         <IconButton
                                                             size="small"
@@ -279,6 +271,7 @@ export default function UserDistributions() {
                     ))}
                 </Box>
             )}
+            {!loading && !error && <Pagination page={page} count={listData.meta?.last_page || 1} onChange={(_, nextPage) => fetchDistributions(nextPage)} />}
         </Box>
     );
 }
