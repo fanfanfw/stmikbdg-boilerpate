@@ -324,8 +324,8 @@ export default function AdminAcademicDocuments() {
 
             <Dialog open={dialogOpen} onClose={() => !saving && setDialogOpen(false)} fullWidth maxWidth="md">
                 <DialogTitle>{form.replaces_document_id ? 'Ganti Dokumen Akademik Resmi' : 'Terbitkan Dokumen Akademik Resmi'}</DialogTitle>
-                <DialogContent className="space-y-4 pt-3">
-                    {!form.replaces_document_id && <div className="flex gap-2 pt-2">
+                <DialogContent dividers className="!pt-6 grid gap-5">
+                    {!form.replaces_document_id && <div className="flex gap-3">
                         <TextField fullWidth size="small" label="Cari NIM atau nama mahasiswa" value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} />
                         <Button variant="outlined" disabled={searching} onClick={searchStudents} sx={buttonSx}>{searching ? 'Mencari...' : 'Cari'}</Button>
                     </div>}
