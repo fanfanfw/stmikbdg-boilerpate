@@ -17,7 +17,10 @@ class ArsipDigitalProxyController extends Controller
         $activeRole = $this->activeRole();
 
         if (! $token) {
-            return redirect()->route('logout');
+            return response()->json([
+                'status' => 'fail',
+                'message' => 'Unauthenticated.',
+            ], 401);
         }
 
         if (! $activeRole) {

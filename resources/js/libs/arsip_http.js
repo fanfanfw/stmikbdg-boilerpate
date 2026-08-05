@@ -262,14 +262,28 @@ export async function downloadBlob(path, filename, options = {}) {
     });
 
     const blob = response.data;
-    if (!(blob instanceof Blob) || blob.size === 0) {
-        throw { response: { status: response.status, data: { message: 'File unduhan kosong atau tidak valid.' } } };
+    const contentType = String(response.headers?.['content-type'] || blob?.type || '').toLowerCase();
+    if (!(blob instanceof Blob) || blob.size === 0 || contentType.includes('text/html')) {
+        let message = 'File unduhan kosong atau tidak valid.';
+        if (blob instanceof Blob && contentType.includes('application/json')) {
+            try {
+                message = JSON.parse(await blob.text()).message || message;
+            } catch (_) {
+                // Keep stable fallback for malformed JSON responses.
+            }
+        }
+        throw { response: { status: response.status, data: { message } } };
     }
 
+    const disposition = response.headers?.['content-disposition'] || '';
+    const encodedFilename = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    const headerFilename = encodedFilename
+        ? decodeURIComponent(encodedFilename)
+        : disposition.match(/filename="?([^";]+)"?/i)?.[1];
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = filename || 'arsip-digital-download';
+    link.download = headerFilename || filename || 'arsip-digital-download';
     document.body.appendChild(link);
     link.click();
     link.remove();

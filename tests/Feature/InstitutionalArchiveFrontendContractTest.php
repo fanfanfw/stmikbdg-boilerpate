@@ -395,4 +395,17 @@ JS;
         $this->assertStringNotContainsString('deleteInstitutionalArchiveVersion', $api);
         $this->assertStringNotContainsString('deleteInstitutionalArchiveVersion', $detail);
     }
+
+    public function test_download_helper_rejects_html_and_uses_response_filename(): void
+    {
+        $http = file_get_contents(base_path('resources/js/libs/arsip_http.js'));
+        $api = file_get_contents(base_path('resources/js/libs/arsip_api.js'));
+
+        $this->assertStringContainsString("contentType.includes('text/html')", $http);
+        $this->assertStringContainsString("JSON.parse(await blob.text()).message", $http);
+        $this->assertStringContainsString("response.headers?.['content-disposition']", $http);
+        $this->assertStringContainsString("link.download = headerFilename || filename", $http);
+        $this->assertStringContainsString('const requestFileId = requestFile?.request_file_id;', $api);
+        $this->assertStringNotContainsString('requestFile?.file_id', $api);
+    }
 }

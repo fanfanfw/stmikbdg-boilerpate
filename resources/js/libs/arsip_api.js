@@ -123,7 +123,7 @@ export const arsipApi = {
     bulkRejectAssignments: (assignmentIds, reason) =>
         postJson('/admin/request-assignments/bulk-reject', { assignment_ids: assignmentIds, reason }),
     downloadRequestFile: (requestFile) => {
-        const requestFileId = requestFile?.request_file_id ?? requestFile?.id ?? requestFile?.file_id;
+        const requestFileId = requestFile?.request_file_id;
         if (requestFileId == null) {
             missingFileId();
         }

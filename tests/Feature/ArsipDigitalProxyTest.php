@@ -12,6 +12,27 @@ use Tests\TestCase;
 
 class ArsipDigitalProxyTest extends TestCase
 {
+    public function test_proxy_without_session_returns_json_401_instead_of_redirect_html(): void
+    {
+        $this->withoutMiddleware(hasToken::class)
+            ->get('/arsip-digital/proxy/files/1/download')
+            ->assertUnauthorized()
+            ->assertHeader('content-type', 'application/json')
+            ->assertExactJson(['status' => 'fail', 'message' => 'Unauthenticated.']);
+    }
+
+    public function test_proxy_preserves_backend_html_for_frontend_rejection(): void
+    {
+        $this->withProxySession(['is_mhs' => true]);
+        Http::fake(fn () => Http::response('<html>login</html>', 401, ['content-type' => 'text/html']));
+
+        $this->withoutMiddleware(hasToken::class)
+            ->get('/arsip-digital/proxy/files/1/download')
+            ->assertUnauthorized()
+            ->assertHeader('content-type', 'text/html; charset=UTF-8')
+            ->assertSee('<html>login</html>', false);
+    }
+
     public function test_proxy_forwards_token_and_active_role_headers(): void
     {
         $this->withProxySession(['is_mhs' => true]);
