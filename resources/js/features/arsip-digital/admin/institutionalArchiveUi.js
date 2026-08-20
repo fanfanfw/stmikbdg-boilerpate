@@ -27,6 +27,8 @@ export const storageDashboardController = () => {
 export async function runStorageSync({ capture, trigger, onJob, onError, formatError }) { try { const response = await trigger(); if (!capture.valid()) return false; onJob(response?.data?.job || response?.job); return true; } catch (error) { if (!capture.valid()) return false; if (error?.response?.status === 409 && error.response.data?.data?.job) { onJob(error.response.data.data.job); return true; } const formatted = await formatError(error); if (capture.valid()) onError(formatted.message); return false; } }
 
 export const uploadPercent = event => event?.total > 0 ? Math.min(100, Math.round((event.loaded * 100) / event.total)) : null;
+export const verificationSummary = item => item?.current_verification?.verification_summary || item?.current_verification || item?.current_file?.institutional_verification?.verification_summary || item?.verification?.verification_summary || item?.verification || null;
+export const verificationLabel = status => ({ pending: 'Menunggu', processing: 'Diproses', ready: 'Siap', failed: 'Gagal', replaced: 'Diganti', revoked: 'Dicabut', unsupported: 'Tidak didukung' }[status] || 'Belum tersedia');
 export const validationErrors = formatted => formatted?.errors || {};
 export const classificationPayload = (type, form) => type === 'unit'
     ? { name: form.name.trim(), code: form.code.trim() || null, description: form.description.trim() || null }

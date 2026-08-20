@@ -145,7 +145,7 @@ JS;
         }
 
         $detail = file_get_contents(base_path('resources/js/features/arsip-digital/admin/AdminInstitutionalArchiveDetail.jsx'));
-        $this->assertStringContainsString('runPreview(window.open.bind(window), () => arsipApi.previewInstitutionalArchive(archiveId), URL, value => { if (lifecycle.valid()) setError(value); }, formatArsipError, setTimeout, lifecycle)', $detail);
+        $this->assertStringContainsString('runPreview(window.open.bind(window), () => arsipApi.previewVerified(archiveId), URL, value => { if (lifecycle.valid()) setError(value); }, formatArsipError, setTimeout, lifecycle)', $detail);
     }
 
     public function test_versioning_helpers_execute_success_failure_pagination_and_exact_download_contracts(): void
@@ -373,6 +373,8 @@ JS;
         $this->assertStringContainsString('arsipApi.uploadInstitutionalArchiveVersion(archiveId, data, progress)', $detail);
         $this->assertStringContainsString('refreshHistory: page => loadVersions(lifecycle, historyRequests.current, archiveId, page)', $detail);
         $this->assertStringContainsString('runExactVersionDownload({ lifecycle, currentArchiveId: () => currentRouteId.current', $detail);
+        $this->assertStringContainsString('runDownload(() => arsipApi.downloadVerified(item)', $detail);
+        $this->assertStringNotContainsString('downloadInstitutionalArchive(item)', $detail);
 
         $this->assertStringContainsString('type="file" inputRef={versionInput}', $detail);
         $this->assertStringContainsString("breadcrumbs={[{ label: 'Arsip Lembaga', href: '/home/arsip-lembaga' }, { label: 'Detail' }]}", $detail);
@@ -389,6 +391,8 @@ JS;
             $this->assertStringContainsString($versionMetadata, $detail);
         }
 
+        $this->assertStringContainsString('downloadVerified: (archive) => downloadBlob(`/admin/institutional-archives/${archive.institutional_archive_id}/download`', $api);
+        $this->assertStringNotContainsString('downloadInstitutionalArchive: (archive)', $api);
         $this->assertStringContainsString('uploadInstitutionalArchiveVersion: (id, formData, onUploadProgress) => uploadFormData(`/admin/institutional-archives/${id}/versions`, formData, { onUploadProgress })', $api);
         $this->assertStringContainsString('institutionalArchiveVersions: (id, params) => getJson(`/admin/institutional-archives/${id}/versions`, params)', $api);
         $this->assertStringContainsString('downloadInstitutionalArchiveVersion: (archiveId, file) => downloadBlob(`/admin/institutional-archives/${archiveId}/versions/${file.file_id}/download`', $api);
