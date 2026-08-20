@@ -221,4 +221,7 @@ export const arsipApi = {
 
     // Audit Logs
     auditLogs: (params) => getJson('/admin/audit-logs', params),
+    auditLogNote: (id) => getJson(`/admin/audit-logs/${id}/note`),
+    createAuditLogNote: (id, payload) => postJson(`/admin/audit-logs/${id}/note`, payload),
+    updateAuditLogNote: (id, payload) => putJson(`/admin/audit-logs/${id}/note`, payload),
 };
